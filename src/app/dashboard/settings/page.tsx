@@ -28,7 +28,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useFirebase } from "@/firebase/provider";
 import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import type { Certificate as CertificateType, Skill } from "@/lib/types";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -52,14 +52,17 @@ function AccountTab() {
   const [certificates, setCertificates] = useState<CertificateType[]>([]);
   const { firebaseApp } = useFirebase();
   const storage = getStorage(firebaseApp);
+  
+  const [selectedCertFile, setSelectedCertFile] = useState<File | null>(null);
+  const [isUploadingCert, setIsUploadingCert] = useState(false);
 
   const fetchCertificates = useCallback(async () => {
     if (!user) return;
-    const certsRef = doc(firestore, 'users', user.id, 'data', 'certificates');
+    const certsRef = doc(firestore, 'users', user.id);
     try {
       const docSnap = await getDoc(certsRef);
-      if (docSnap.exists()) {
-        setCertificates(docSnap.data().items || []);
+      if (docSnap.exists() && docSnap.data().certificates) {
+        setCertificates(docSnap.data().certificates || []);
       }
     } catch (error) {
       console.error("Error fetching certificates:", error);
@@ -85,6 +88,63 @@ function AccountTab() {
       fetchSkills();
     }
   }, [user, fetchCertificates, fetchSkills]);
+  
+  const handleCertificateFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedCertFile(e.target.files[0]);
+    }
+  };
+
+  const handleCertificateUpload = async () => {
+    if (!selectedCertFile || !user) return;
+
+    setIsUploadingCert(true);
+    const certificateId = doc(collection(firestore, 'id')).id;
+    const storageRef = ref(storage, `certificates/${user.id}/${certificateId}-${selectedCertFile.name}`);
+
+    try {
+      const snapshot = await uploadBytes(storageRef, selectedCertFile);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+
+      const newCertificate: CertificateType = {
+        id: certificateId,
+        userId: user.id,
+        certificateName: selectedCertFile.name,
+        fileUrl: downloadURL,
+        uploadedAt: serverTimestamp(),
+      };
+
+      const userDocRef = doc(firestore, 'users', user.id);
+      const updatedCertificates = [...certificates, newCertificate];
+      const dataToSave = { certificates: updatedCertificates };
+
+      await setDoc(userDocRef, dataToSave, { merge: true });
+
+      setCertificates(updatedCertificates);
+      setSelectedCertFile(null);
+
+      toast({
+        title: "Success!",
+        description: "Your certificate has been uploaded.",
+      });
+
+    } catch (error) {
+        console.error('Upload failed:', error);
+        const permissionError = new FirestorePermissionError({
+            path: `certificates/${user.id}/${certificateId}-${selectedCertFile.name}`,
+            operation: 'create',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        toast({
+            variant: "destructive",
+            title: "Upload failed",
+            description: "There was a problem uploading your certificate.",
+        });
+    } finally {
+      setIsUploadingCert(false);
+    }
+  };
+
 
   if (!user) {
     return null;
@@ -138,10 +198,10 @@ function AccountTab() {
 
     // 2. Remove the certificate metadata from Firestore
     const updatedCertificates = certificates.filter(c => c.id !== certificate.id);
-    const certsDocRef = doc(firestore, 'users', user.id, 'data', 'certificates');
-    const dataToSave = { items: updatedCertificates };
+    const certsDocRef = doc(firestore, 'users', user.id);
+    const dataToSave = { certificates: updatedCertificates };
     
-    setDoc(certsDocRef, dataToSave)
+    setDoc(certsDocRef, dataToSave, { merge: true })
       .then(() => {
         setCertificates(updatedCertificates);
         toast({
@@ -259,8 +319,10 @@ function AccountTab() {
                 <div className="grid w-full max-w-full items-center gap-1.5">
                   <Label htmlFor="certificate-upload">Upload Certificate (PDF, PNG, JPG)</Label>
                   <div className="flex w-full items-center space-x-2">
-                    <Input id="certificate-upload" type="file" accept=".pdf,.png,.jpg,.jpeg" />
-                    <Button variant="outline"><Upload className="mr-2 h-4 w-4" /> Upload</Button>
+                    <Input id="certificate-upload" type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={handleCertificateFileChange} />
+                    <Button variant="outline" onClick={handleCertificateUpload} disabled={!selectedCertFile || isUploadingCert}>
+                        {isUploadingCert ? 'Uploading...' : <><Upload className="mr-2 h-4 w-4" /> Upload</>}
+                    </Button>
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -607,4 +669,3 @@ export default function SettingsPage() {
   );
 }
 
-    

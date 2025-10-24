@@ -1,0 +1,289 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the PrashikshanConnect platform.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "role": {
+          "type": "string",
+          "description": "Role of the user (student, faculty, industry)."
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the user."
+        },
+        "profilePicture": {
+          "type": "string",
+          "description": "URL to the user's profile picture.",
+          "format": "uri"
+        },
+        "resumeUrl": {
+          "type": "string",
+          "description": "URL to the user's resume stored in Firebase Storage.",
+          "format": "uri"
+        },
+        "settings": {
+          "type": "string",
+          "description": "User-specific settings stored as a JSON string."
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "role",
+        "name"
+      ]
+    },
+    "Internship": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Internship",
+      "type": "object",
+      "description": "Represents an internship opportunity.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the internship."
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the internship."
+        },
+        "company": {
+          "type": "string",
+          "description": "Name of the company offering the internship."
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "Indicates whether the internship is verified."
+        },
+        "duration": {
+          "type": "string",
+          "description": "Duration of the internship (e.g., '3 months')."
+        },
+        "credits": {
+          "type": "number",
+          "description": "Number of credits awarded for completing the internship."
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of the internship."
+        },
+        "industryUserId": {
+          "type": "string",
+          "description": "Reference to Industry User. (Relationship: IndustryUser 1:N Internship)"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "company",
+        "verified",
+        "duration",
+        "credits",
+        "description",
+        "industryUserId"
+      ]
+    },
+    "Application": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Application",
+      "type": "object",
+      "description": "Represents a student's application for an internship.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the application."
+        },
+        "studentId": {
+          "type": "string",
+          "description": "Reference to Student. (Relationship: Student 1:N Application)"
+        },
+        "internshipId": {
+          "type": "string",
+          "description": "Reference to Internship. (Relationship: Internship 1:N Application)"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the application (e.g., 'applied', 'accepted', 'rejected', 'completed')."
+        },
+        "feedback": {
+          "type": "string",
+          "description": "Feedback provided on the application."
+        }
+      },
+      "required": [
+        "id",
+        "studentId",
+        "internshipId",
+        "status"
+      ]
+    },
+    "Mou": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Mou",
+      "type": "object",
+      "description": "Represents a Memorandum of Understanding (MoU) between a college and a company.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the MoU."
+        },
+        "college": {
+          "type": "string",
+          "description": "Name of the college."
+        },
+        "company": {
+          "type": "string",
+          "description": "Name of the company."
+        },
+        "validTill": {
+          "type": "string",
+          "description": "Date until which the MoU is valid.",
+          "format": "date-time"
+        },
+        "documentUrl": {
+          "type": "string",
+          "description": "URL to the MoU document stored in Firebase Storage.",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "id",
+        "college",
+        "company",
+        "validTill"
+      ]
+    },
+    "IndustryUser": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "IndustryUser",
+      "type": "object",
+      "description": "Represents an industry user who can post and manage internships.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the industry user entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the user. (Relationship: User 1:1 IndustryUser)"
+        },
+        "companyName": {
+          "type": "string",
+          "description": "Name of the company the industry user represents."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "companyName"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles. Path-based ownership for private user data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/applications/{applicationId}",
+        "definition": {
+          "entityName": "Application",
+          "schema": {
+            "$ref": "#/backend/entities/Application"
+          },
+          "description": "Stores applications for each user. Path-based ownership, only the user and admins can access.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            },
+            {
+              "name": "applicationId",
+              "description": "The unique identifier of the application."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/internships/{internshipId}",
+        "definition": {
+          "entityName": "Internship",
+          "schema": {
+            "$ref": "#/backend/entities/Internship"
+          },
+          "description": "Stores all internship opportunities.  Accessible to all users for browsing.",
+          "params": [
+            {
+              "name": "internshipId",
+              "description": "The unique identifier of the internship."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/mous/{mouId}",
+        "definition": {
+          "entityName": "Mou",
+          "schema": {
+            "$ref": "#/backend/entities/Mou"
+          },
+          "description": "Stores Memorandum of Understanding (MoU) documents. Access will be controlled based on roles.",
+          "params": [
+            {
+              "name": "mouId",
+              "description": "The unique identifier of the MoU."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/industryUsers/{industryUserId}",
+        "definition": {
+          "entityName": "IndustryUser",
+          "schema": {
+            "$ref": "#/backend/entities/IndustryUser"
+          },
+          "description": "Stores industry user profiles. Accessible to admins and the specific industry user.",
+          "params": [
+            {
+              "name": "industryUserId",
+              "description": "The unique identifier of the industry user."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to ensure authorization independence, clarity, and scalability for the PrashikshanConnect application. It leverages path-based ownership for user-specific data and membership maps for collaborative resources. Authorization Independence is achieved by denormalizing relevant authorization data (like user roles or membership information) directly into documents where access control is needed, eliminating the need for `get()` calls in security rules. This approach is crucial for maintaining atomicity during create/update operations.\n\nSegregation of data based on access control requirements is used to simplify security rules. For example, internships are stored in a top-level collection, enabling easy listing and filtering for all users, while applications are stored within each user's document to ensure only the user and relevant parties can access them. The membership model is used where collaborative access is required, such as with MOUs where both the college and company need access.\n\nThe structure supports QAPs by:\n\n*   **Internships:** Storing internships in a top-level collection allows for efficient listing and filtering, supporting the required QAPs for browsing internships.\n*   **Applications:** Storing applications as subcollections of users enables secure and efficient access control, as only the user can access their applications. This avoids the need for complex filtering in rules.\n*   **MOUs:** The structure will support listing all MOUs, but security rules will need to limit access based on membership or roles. The data could be separated by user role for increased security and faster QAPs.\n\nThis design avoids hierarchical authorization dependencies, promotes clear and maintainable security rules, and supports efficient data retrieval for the core features of the PrashikshanConnect platform."
+  }
+}

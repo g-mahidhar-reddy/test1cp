@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 
 // This would come from useAuth() in a client component
 const userRole = "student"; // 'student', 'faculty', 'industry'
+const userId = "student1"; // This would also come from the user object
 
 const studentStats = [
   {
@@ -83,7 +84,10 @@ const getStats = (role: string) => {
 
 export default function DashboardPage() {
   const stats = getStats(userRole);
-  const recentApplications = mockApplications.slice(0, 5);
+  
+  // Filter applications for the current user and take the most recent 5.
+  const myApplications = mockApplications.filter(app => app.studentId === userId);
+  const recentApplications = myApplications.slice(0, 5);
 
   return (
     <>
@@ -108,7 +112,7 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>Recent Applications</CardTitle>
             <CardDescription>
-              You have {mockApplications.length} total applications.
+              You have {myApplications.length} total applications.
             </CardDescription>
           </CardHeader>
           <CardContent>

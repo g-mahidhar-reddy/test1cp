@@ -1,3 +1,4 @@
+
 export type UserRole = 'student' | 'faculty' | 'industry';
 
 export interface User {
@@ -61,4 +62,12 @@ export interface StatCardData {
   value: string;
   change?: string;
   icon: React.ElementType;
+}
+
+export interface Certificate {
+  id: string;
+  userId: string;
+  certificateName: string;
+  fileUrl: string;
+  uploadedAt: any; // Firestore ServerTimestamp
 }

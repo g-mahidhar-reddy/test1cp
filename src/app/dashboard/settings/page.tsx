@@ -14,13 +14,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Settings, Bell, Shield, HelpCircle, Linkedin, Mail } from "lucide-react";
+import { User, Settings, Bell, Shield, HelpCircle, Linkedin, Mail, Upload, FileText, Download, Trash2, PlusCircle, X } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Switch } from "@/components/ui/switch";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+
+const predefinedSkills = ["Communication", "Web Development", "Python", "Data Analysis", "Machine Learning", "UI/UX Design", "Marketing", "Cloud Computing", "Leadership"];
+const userCertificates = [
+    { id: 'cert1', name: 'AI Internship Certificate.pdf', url: '#', uploadedAt: '2024-07-20' },
+    { id: 'cert2', name: 'Advanced React Course.png', url: '#', uploadedAt: '2024-06-15' }
+];
 
 function AccountTab() {
   const { user } = useAuth();
@@ -30,90 +38,185 @@ function AccountTab() {
   }
 
   return (
-     <Card>
-      <CardHeader>
-        <CardTitle>Account</CardTitle>
-        <CardDescription>Manage your account settings and personal information.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="grid gap-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input id="name" defaultValue={user.name} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" defaultValue={user.email} disabled />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input id="phone" defaultValue={user.phone} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="role">Role</Label>
-              <Input id="role" defaultValue={user.role} disabled />
-            </div>
-          </div>
+    <div className="space-y-8">
+        {/* Profile Details Card */}
+        <Card>
+            <CardHeader>
+                <CardTitle>Profile Details</CardTitle>
+                <CardDescription>Update your personal information and profile picture.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                 <form className="grid gap-6">
+                    <div className="flex items-center gap-6">
+                        <Avatar className="h-20 w-20">
+                            <AvatarImage src={user.avatarUrl} alt={user.name} />
+                            <AvatarFallback>{user.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div className="grid gap-2">
+                             <Label htmlFor="profile-picture">Profile Picture</Label>
+                             <Input id="profile-picture" type="file" className="max-w-sm" />
+                             <p className="text-sm text-muted-foreground">PNG, JPG, or GIF up to 5MB.</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="grid gap-2">
+                        <Label htmlFor="name">Full Name</Label>
+                        <Input id="name" defaultValue={user.name} />
+                        </div>
+                        <div className="grid gap-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input id="email" type="email" defaultValue={user.email} disabled />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="grid gap-2">
+                            <Label htmlFor="phone">Phone</Label>
+                            <Input id="phone" defaultValue={user.phone} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="role">Role</Label>
+                            <Input id="role" defaultValue={user.role} disabled />
+                        </div>
+                    </div>
 
-          {user.role === 'student' && (
-            <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="college">College/University</Label>
-                  <Input id="college" defaultValue={user.college} />
-                </div>
-                 <div className="grid gap-2">
-                  <Label htmlFor="branch">Branch</Label>
-                  <Input id="branch" defaultValue={user.branch} />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="semester">Semester</Label>
-                  <Input id="semester" type="number" defaultValue={user.semester} />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="gpa">GPA</Label>
-                  <Input id="gpa" type="number" step="0.1" defaultValue={user.gpa} />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="skills">Skills</Label>
-                <Textarea id="skills" placeholder="React, Node.js, Python..." defaultValue={user.skills?.join(', ')} />
-                <p className="text-sm text-muted-foreground">Enter skills separated by commas.</p>
-              </div>
-               <div className="grid gap-2">
-                <Label htmlFor="certifications">Certifications</Label>
-                <Textarea id="certifications" placeholder="AWS Certified Developer, etc." defaultValue={user.certifications?.join(', ')} />
-                 <p className="text-sm text-muted-foreground">Enter certifications separated by commas.</p>
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                 <div className="grid gap-2">
-                  <Label htmlFor="linkedin">LinkedIn URL</Label>
-                  <Input id="linkedin" defaultValue={user.linkedinUrl} />
-                </div>
-                 <div className="grid gap-2">
-                  <Label htmlFor="portfolio">Portfolio URL</Label>
-                  <Input id="portfolio" defaultValue={user.portfolioUrl} />
-                </div>
-              </div>
-            </>
-          )}
+                    {user.role === 'student' && (
+                        <>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="grid gap-2">
+                            <Label htmlFor="college">College/University</Label>
+                            <Input id="college" defaultValue={user.college} />
+                            </div>
+                            <div className="grid gap-2">
+                            <Label htmlFor="branch">Branch</Label>
+                            <Input id="branch" defaultValue={user.branch} />
+                            </div>
+                            <div className="grid gap-2">
+                            <Label htmlFor="semester">Semester</Label>
+                            <Input id="semester" type="number" defaultValue={user.semester} />
+                            </div>
+                            <div className="grid gap-2">
+                            <Label htmlFor="gpa">GPA</Label>
+                            <Input id="gpa" type="number" step="0.1" defaultValue={user.gpa} />
+                            </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div className="grid gap-2">
+                            <Label htmlFor="linkedin">LinkedIn URL</Label>
+                            <Input id="linkedin" defaultValue={user.linkedinUrl} />
+                            </div>
+                            <div className="grid gap-2">
+                            <Label htmlFor="portfolio">Portfolio URL</Label>
+                            <Input id="portfolio" defaultValue={user.portfolioUrl} />
+                            </div>
+                        </div>
+                        </>
+                    )}
 
-          {user.role === 'industry' && (
-            <div className="grid gap-2">
-              <Label htmlFor="company">Company</Label>
-              <Input id="company" defaultValue={user.company} />
-            </div>
-          )}
+                    {user.role === 'industry' && (
+                        <div className="grid gap-2">
+                        <Label htmlFor="company">Company</Label>
+                        <Input id="company" defaultValue={user.company} />
+                        </div>
+                    )}
+                </form>
+            </CardContent>
+             <CardFooter className="border-t px-6 py-4 flex justify-between items-center">
+                <p className="text-xs text-muted-foreground">Last updated on July 20, 2024</p>
+                <Button>Save Changes</Button>
+            </CardFooter>
+        </Card>
 
-          <div className="flex justify-end">
-             <Button type="submit">Save Changes</Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+        {/* Certificates Card */}
+        <Card>
+            <CardHeader>
+                <CardTitle>Certificates</CardTitle>
+                <CardDescription>Upload and manage your professional certificates.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                <div className="grid w-full max-w-full items-center gap-1.5">
+                  <Label htmlFor="certificate-upload">Upload Certificate (PDF, PNG, JPG)</Label>
+                  <div className="flex w-full items-center space-x-2">
+                    <Input id="certificate-upload" type="file" accept=".pdf,.png,.jpg,.jpeg" />
+                    <Button variant="outline"><Upload className="mr-2 h-4 w-4" /> Upload</Button>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                    <h4 className="font-medium text-sm">Uploaded Certificates</h4>
+                    {userCertificates.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {userCertificates.map(cert => (
+                                <div key={cert.id} className="flex items-center justify-between rounded-lg border bg-muted/50 p-3">
+                                    <div className="flex items-center gap-3">
+                                        <FileText className="h-6 w-6 text-muted-foreground" />
+                                        <p className="font-medium truncate text-sm">{cert.name}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button variant="ghost" size="icon" asChild>
+                                            <a href={cert.url} target="_blank" rel="noopener noreferrer">
+                                                <Download className="h-4 w-4" />
+                                                <span className="sr-only">Download</span>
+                                            </a>
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                            <Trash2 className="h-4 w-4" />
+                                            <span className="sr-only">Delete</span>
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-center rounded-lg border-2 border-dashed bg-muted/20 p-8">
+                            <p className="text-sm text-muted-foreground">No certificates uploaded yet.</p>
+                        </div>
+                    )}
+                </div>
+            </CardContent>
+        </Card>
+
+        {/* Skills Card */}
+        <Card>
+            <CardHeader>
+                <CardTitle>Skills</CardTitle>
+                <CardDescription>Manage your skills to get better internship recommendations.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                 <div>
+                    <h4 className="font-medium text-sm mb-2">Your Skills</h4>
+                     <div className="flex flex-wrap gap-2">
+                        {user.skills?.map(skill => (
+                             <Badge key={skill} variant="secondary" className="flex items-center gap-1.5 pr-1">
+                                {skill}
+                                <button className="rounded-full hover:bg-background/50 p-0.5">
+                                    <X className="h-3 w-3" />
+                                    <span className="sr-only">Remove {skill}</span>
+                                </button>
+                            </Badge>
+                        ))}
+                     </div>
+                </div>
+                 <div>
+                    <h4 className="font-medium text-sm mb-2">Add Skills</h4>
+                    <div className="flex flex-wrap gap-2">
+                         {predefinedSkills.map(skill => (
+                            <Button key={skill} variant="outline" size="sm">
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                {skill}
+                            </Button>
+                        ))}
+                        <Button variant="outline" size="sm">
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Add Custom Skill
+                        </Button>
+                    </div>
+                </div>
+            </CardContent>
+             <CardFooter className="border-t px-6 py-4 flex justify-end">
+                <Button>Save Skills</Button>
+            </CardFooter>
+        </Card>
+    </div>
   )
 }
 

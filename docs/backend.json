@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "User": {
@@ -189,6 +190,43 @@
         "userId",
         "companyName"
       ]
+    },
+    "Certificate": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Certificate",
+      "type": "object",
+      "description": "Represents a certificate uploaded by a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the certificate."
+        },
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who owns this certificate."
+        },
+        "certificateName": {
+          "type": "string",
+          "description": "The name of the certificate file."
+        },
+        "fileUrl": {
+          "type": "string",
+          "description": "URL to the certificate file in Firebase Storage.",
+          "format": "uri"
+        },
+        "uploadedAt": {
+          "type": "string",
+          "description": "The timestamp when the certificate was uploaded.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "certificateName",
+        "fileUrl",
+        "uploadedAt"
+      ]
     }
   },
   "auth": {
@@ -279,6 +317,22 @@
             {
               "name": "industryUserId",
               "description": "The unique identifier of the industry user."
+            }
+          ]
+        }
+      },
+       {
+        "path": "/certificates/{certificateId}",
+        "definition": {
+          "entityName": "Certificate",
+          "schema": {
+            "$ref": "#/backend/entities/Certificate"
+          },
+          "description": "Stores metadata for user-uploaded certificates.",
+          "params": [
+            {
+              "name": "certificateId",
+              "description": "The unique identifier of the certificate."
             }
           ]
         }

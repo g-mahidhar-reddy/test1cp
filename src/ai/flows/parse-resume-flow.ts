@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -57,7 +58,7 @@ const prompt = ai.definePrompt({
   name: 'parseResumePrompt',
   input: {schema: ParseResumeInputSchema},
   output: {schema: ParseResumeOutputSchema},
-  model: googleAI.model('gemini-1.5-flash-preview-0514'),
+  model: googleAI.model('gemini-1.5-flash'),
   prompt: `You are an expert resume parser. Your task is to analyze the provided resume document and extract key information in a structured JSON format.
 
   Analyze the resume provided in the media.

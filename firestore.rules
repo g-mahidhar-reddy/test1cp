@@ -1,246 +1,161 @@
 /**
- * @fileoverview Firestore Security Rules for PrashikshanConnect.
+ * @file Firestore Security Rules
+ * @description This ruleset is in PROTOTYPING mode and grants all permissions to all users.
  *
- * Core Philosophy:
- * This ruleset prioritizes strict user-ownership for private data (e.g., user profiles, applications)
- * while allowing public read access to certain collections (e.g., internships).  It explicitly denies potentially
- * insecure operations like listing all users.  Data consistency is enforced by validating relationships
- * between documents based on IDs in the paths and document data.
+ * Core Philosophy: Open access for rapid prototyping.  All reads and writes are allowed.
  *
  * Data Structure:
- * - /users/{userId}:  Stores user profile data.  Subcollections like /skills and /applications store user-specific data.
- * - /internships/{internshipId}: Stores internship opportunities, publicly readable.
- * - /mous/{mouId}: Stores MOUs, access controlled via roles.
+ * - /users/{userId}:  User profiles, owned by the user.
+ * - /users/{userId}/skills/{skillId}: Skills associated with a user, owned by the user.
+ * - /users/{userId}/applications/{applicationId}: Internship applications, owned by the user.
+ * - /internships/{internshipId}: Internship opportunities, publicly readable.
+ * - /mous/{mouId}: Memoranda of Understanding.
+ * - /industryUsers/{industryUserId}: Industry user profiles.
+ * - /certificates/{certificateId}: Certificates uploaded by users.
+ * - /recommendations/{recommendationId}: Recommendations for users.
+ * - /feedback/{feedbackId}: User feedback on recommendations.
  *
  * Key Security Decisions:
- * - User listing is disallowed.
- * - Public read access is granted to the /internships collection.
- * - Ownership is strictly enforced for user-specific data.
- * - Data requiring relational integrity checks (ownership) has those checks enforced.
+ * - ALL data is publicly accessible and modifiable during prototyping.
+ * - Ownership checks are present but always evaluate to true.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Protects user profiles with path-based ownership.
+     * @description Grants all permissions to all users for User profiles.
      * @path /users/{userId}
-     * @allow (create) User with ID 'user123' can create their profile.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "id": "user123", "email": "test@example.com", "role": "student", "name": "Test User" } } }
-     * @allow (get) User with ID 'user123' can read their profile.
-     *   Request: { "auth": { "uid": "user123" } }
-     * @allow (update) User with ID 'user123' can update their profile.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "id": "user123", "name": "Updated Name" } } }
-     * @deny (create) User with ID 'user456' tries to create a profile with ID 'user123'.
-     *   Request: { "auth": { "uid": "user456" }, "resource": { "data": { "id": "user123" } } }
-     * @deny (get) User with ID 'user456' tries to read the profile of user 'user123'.
-     *   Request: { "auth": { "uid": "user456" } }
-     * @principle Enforces document ownership for writes.
+     * @allow (create) Any authenticated user can create a profile.
+     * @allow (get) Any user can read any profile.
+     * @allow (update) Any user can update any profile.
+     * @allow (delete) Any user can delete any profile.
+     * @deny (none) No requests are denied.
+     * @principle Open access for prototyping.
      */
     match /users/{userId} {
-      // Allow a user to create their own profile, enforcing that the userId in the path
-      // matches their authenticated UID and the 'id' field in the document.
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
-      // Allow a user to read their own profile.
-      allow get: if isSignedIn() && isOwner(userId);
-      // Allow a user to update their own profile.  Enforce immutability of the 'id' field.
-      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      // Allow a user to delete their own profile.
-      allow delete: if isSignedIn() && isExistingOwner(userId);
-      // Disallow listing all users.
-      allow list: if false;
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
 
     /**
-     * @description Protects user skills with path-based ownership.
+     * @description Grants all permissions to all users for User Skills.
      * @path /users/{userId}/skills/{skillId}
-     * @allow (create) User 'user123' creates a skill under their profile.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "name": "Coding", "level": "Beginner" } } }
-     * @allow (get) User 'user123' reads a skill under their profile.
-     *   Request: { "auth": { "uid": "user123" } }
-     * @allow (update) User 'user123' updates a skill under their profile.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "level": "Intermediate" } } }
-     * @deny (create) User 'user456' tries to create a skill under user 'user123''s profile.
-     *   Request: { "auth": { "uid": "user456" }, "resource": { "data": { "name": "Coding" } } }
-     * @deny (get) User 'user456' tries to read a skill under user 'user123''s profile.
-     *   Request: { "auth": { "uid": "user456" } }
-     * @principle Restricts access to a user's own data tree.
+     * @allow (create) Any authenticated user can create a skill.
+     * @allow (get) Any user can read any skill.
+     * @allow (update) Any user can update any skill.
+     * @allow (delete) Any user can delete any skill.
+     * @deny (none) No requests are denied.
+     * @principle Open access for prototyping.
      */
     match /users/{userId}/skills/{skillId} {
-      allow create: if isSignedIn() && isOwner(userId);
-      allow get: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
-      allow list: if isSignedIn() && isOwner(userId);
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
 
     /**
-     * @description Protects user applications with path-based ownership.
+     * @description Grants all permissions to all users for User Applications.
      * @path /users/{userId}/applications/{applicationId}
-     * @allow (create) User 'user123' creates an application under their profile.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "internshipId": "intern1", "status": "applied", "studentId": "user123" } } }
-     * @allow (get) User 'user123' reads an application under their profile.
-     *   Request: { "auth": { "uid": "user123" } }
-     * @allow (update) User 'user123' updates an application under their profile.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "status": "accepted" } } }
-     * @deny (create) User 'user456' tries to create an application under user 'user123''s profile.
-     *   Request: { "auth": { "uid": "user456" }, "resource": { "data": { "internshipId": "intern1", "status": "applied" } } }
-     * @deny (get) User 'user456' tries to read an application under user 'user123''s profile.
-     *   Request: { "auth": { "uid": "user456" } }
-     * @principle Restricts access to a user's own data tree.
+     * @allow (create) Any authenticated user can create an application.
+     * @allow (get) Any user can read any application.
+     * @allow (update) Any user can update any application.
+     * @allow (delete) Any user can delete any application.
+     * @deny (none) No requests are denied.
+     * @principle Open access for prototyping.
      */
     match /users/{userId}/applications/{applicationId} {
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.studentId == userId;
-      allow get: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.studentId == userId;
-      allow delete: if isSignedIn() && isExistingOwner(userId);
-      allow list: if isSignedIn() && isOwner(userId);
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
 
     /**
-     * @description Allows public read access to internship opportunities with owner-only writes.
+     * @description Grants all permissions to all users for Internships.
      * @path /internships/{internshipId}
-     * @allow (get) Any user can read an internship.
-     *   Request: { "auth": { "uid": "user123" } }
-     * @allow (list) Any user can list internships.
-     *   Request: { "auth": { "uid": "user123" } }
-     * @allow (create) Industry user creates an internship with matching industryUserId.
-     *   Request: { "auth": { "uid": "industryUser123" }, "resource": { "data": { "title": "Software Engineer", "company": "Google", "industryUserId": "industryUser123" } } }
-     * @allow (update) Industry user updates an internship they own.
-     *   Request: { "auth": { "uid": "industryUser123" }, "resource": { "data": { "title": "Updated Title", "industryUserId": "industryUser123" }, "resource.data": { "industryUserId": "industryUser123" } } }
-     * @deny (create) Regular user attempts to create an internship.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "title": "Software Engineer", "company": "Google", "industryUserId": "industryUser123" } } }
-     * @deny (update) User who isn't the owner attempts to update an internship.
-     *   Request: { "auth": { "uid": "user456" }, "resource": { "data": { "title": "Updated Title", "industryUserId": "industryUser123" }, "resource.data": { "industryUserId": "industryUser123" } } }
-     * @principle Allows public reads, enforces document ownership for writes.
+     * @allow (create) Any authenticated user can create an internship.
+     * @allow (get) Any user can read any internship.
+     * @allow (update) Any user can update any internship.
+     * @allow (delete) Any user can delete any internship.
+     * @deny (none) No requests are denied.
+     * @principle Open access for prototyping.
      */
     match /internships/{internshipId} {
       allow get, list: if true;
-      allow create: if isSignedIn() && request.resource.data.industryUserId != null; // TODO: Add owner validation once the schema is updated with an ownership field.
-      allow update: if isSignedIn() && resource != null && request.resource.data.industryUserId == resource.data.industryUserId; // TODO: Add owner validation once the schema is updated with an ownership field.
-      allow delete: if isSignedIn() && resource != null && request.resource.data.industryUserId == resource.data.industryUserId; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow create, update, delete: if true;
     }
 
     /**
-     * @description Controls access to MOUs based on roles.
+     * @description Grants all permissions to all users for MOUs.
      * @path /mous/{mouId}
-     * @allow (get) Any user can read an MOU.
-     *   Request: { "auth": { "uid": "user123" } }
-     * @allow (list) Any user can list MOUs.
-     *   Request: { "auth": { "uid": "user123" } }
-     * @deny (create) No one can create MOUs (explicitly denied).
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "college": "Example College", "company": "Example Company" } } }
-     * @principle Requires role-based access control (not yet implemented).
+     * @allow (create) Any authenticated user can create a MOU.
+     * @allow (get) Any user can read any MOU.
+     * @allow (update) Any user can update any MOU.
+     * @allow (delete) Any user can delete any MOU.
+     * @deny (none) No requests are denied.
+     * @principle Open access for prototyping.
      */
     match /mous/{mouId} {
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Implement role-based access control.
+      allow create, update, delete: if true;
     }
 
     /**
-     * @description Protects industry user profiles with a combination of user-based and path-based ownership.
+     * @description Grants all permissions to all users for Industry Users.
      * @path /industryUsers/{industryUserId}
-     * @allow (create) A user can create an industry user profile if the 'userId' matches their auth.uid.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "userId": "user123", "companyName": "Example Co" } } }
-     * @allow (get) A user can read an industry user profile if the 'userId' matches their auth.uid.
-     *   Request: { "auth": { "uid": "user123" } }
-     * @allow (update) A user can update their own industry user profile.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "userId": "user123", "companyName": "New Co" } } }
-     * @deny (create) A user attempts to create an industry user profile with a mismatched 'userId'.
-     *   Request: { "auth": { "uid": "user456" }, "resource": { "data": { "userId": "user123", "companyName": "Example Co" } } }
-     * @deny (get) A user attempts to read an industry user profile they don't own.
-     *   Request: { "auth": { "uid": "user456" } }
-     * @principle Enforces user-based ownership and validates data consistency.
+     * @allow (create) Any authenticated user can create a IndustryUser.
+     * @allow (get) Any user can read any IndustryUser.
+     * @allow (update) Any user can update any IndustryUser.
+     * @allow (delete) Any user can delete any IndustryUser.
+     * @deny (none) No requests are denied.
+     * @principle Open access for prototyping.
      */
     match /industryUsers/{industryUserId} {
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow get: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && resource != null && request.resource.data.userId == request.auth.uid;
-      allow delete: if isSignedIn() && resource != null && request.resource.data.userId == request.auth.uid;
-      allow list: if false;
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
+
     /**
-     * @description Controls access to Certificates with owner-only access
+     * @description Grants all permissions to all users for Certificates.
      * @path /certificates/{certificateId}
-     * @allow (create) User with ID 'user123' can create their certificate.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "userId": "user123", "certificateName": "Cert 1", "fileUrl": "http://example.com", "uploadedAt": "2024-01-01" } } }
-     * @allow (get) User with ID 'user123' can read their certificate.
-     *   Request: { "auth": { "uid": "user123" } }
-     * @allow (update) User with ID 'user123' can update their certificate.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "userId": "user123", "certificateName": "Cert 2" } } }
-     * @deny (create) User with ID 'user456' tries to create a certificate with ID 'user123'.
-     *   Request: { "auth": { "uid": "user456" }, "resource": { "data": { "userId": "user123" } } }
-     * @deny (get) User with ID 'user456' tries to read the certificate of user 'user123'.
-     *   Request: { "auth": { "uid": "user456" } }
-     *  @principle Enforces document ownership for writes.
+     * @allow (create) Any authenticated user can create a Certificate.
+     * @allow (get) Any user can read any Certificate.
+     * @allow (update) Any user can update any Certificate.
+     * @allow (delete) Any user can delete any Certificate.
+     * @deny (none) No requests are denied.
+     * @principle Open access for prototyping.
      */
     match /certificates/{certificateId} {
-       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-       allow get: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-       allow update: if isSignedIn() && resource != null && request.resource.data.userId == request.auth.uid;
-       allow delete: if isSignedIn() && resource != null && request.resource.data.userId == request.auth.uid;
-       allow list: if false;
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
+
     /**
-     * @description Controls access to Recommendations with owner-only access
+     * @description Grants all permissions to all users for Recommendations.
      * @path /recommendations/{recommendationId}
-     * @allow (create) User with ID 'user123' can create a recommendation.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "userId": "user123", "type": "internship", "recommendationId": "rec1", "status": "pending" } } }
-     * @allow (get) User with ID 'user123' can read a recommendation.
-     *   Request: { "auth": { "uid": "user123" } }
-     * @allow (update) User with ID 'user123' can update a recommendation.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "userId": "user123", "status": "accepted" } } }
-     * @deny (create) User with ID 'user456' tries to create a recommendation with ID 'user123'.
-     *   Request: { "auth": { "uid": "user456" }, "resource": { "data": { "userId": "user123", "type": "internship", "recommendationId": "rec1", "status": "pending" } } }
-     * @deny (get) User with ID 'user456' tries to read the recommendation of user 'user123'.
-     *   Request: { "auth": { "uid": "user456" } }
-     * @principle Enforces document ownership for writes.
+     * @allow (create) Any authenticated user can create a Recommendation.
+     * @allow (get) Any user can read any Recommendation.
+     * @allow (update) Any user can update any Recommendation.
+     * @allow (delete) Any user can delete any Recommendation.
+     * @deny (none) No requests are denied.
+     * @principle Open access for prototyping.
      */
     match /recommendations/{recommendationId} {
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow get: if isSignedIn();
-      allow update: if isSignedIn() && resource != null && request.resource.data.userId == resource.data.userId;
-      allow delete: if isSignedIn() && resource != null && request.resource.data.userId == resource.data.userId;
-      allow list: if false;
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
 
     /**
-     * @description Controls access to Feedback with owner-only access
+     * @description Grants all permissions to all users for Feedback.
      * @path /feedback/{feedbackId}
-     * @allow (create) User with ID 'user123' can create feedback.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "recommendationId": "rec1", "userId": "user123", "rating": 5, "comment": "Great!" } } }
-     * @allow (get) User with ID 'user123' can read feedback.
-     *   Request: { "auth": { "uid": "user123" } }
-     * @allow (update) User with ID 'user123' can update feedback.
-     *   Request: { "auth": { "uid": "user123" }, "resource": { "data": { "userId": "user123", "rating": 4 } } }
-     * @deny (create) User with ID 'user456' tries to create feedback with ID 'user123'.
-     *   Request: { "auth": { "uid": "user456" }, "resource": { "data": { "recommendationId": "rec1", "userId": "user123", "rating": 5, "comment": "Great!" } } }
-     * @deny (get) User with ID 'user456' tries to read the feedback of user 'user123'.
-     *   Request: { "auth": { "uid": "user456" } }
-     * @principle Enforces document ownership for writes.
+     * @allow (create) Any authenticated user can create a Feedback.
+     * @allow (get) Any user can read any Feedback.
+     * @allow (update) Any user can update any Feedback.
+     * @allow (delete) Any user can delete any Feedback.
+     * @deny (none) No requests are denied.
+     * @principle Open access for prototyping.
      */
     match /feedback/{feedbackId} {
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow get: if isSignedIn();
-      allow update: if isSignedIn() && resource != null && request.resource.data.userId == resource.data.userId;
-      allow delete: if isSignedIn() && resource != null && request.resource.data.userId == resource.data.userId;
-      allow list: if false;
+      allow get, list: if true;
+      allow create, update, delete: if true;
     }
-  }
-
-  // Helper function to determine if the user is signed in.
-  function isSignedIn() {
-    return request.auth != null;
-  }
-
-  // Helper function to determine if the user is the owner of the document based on the userId.
-  function isOwner(userId) {
-    return request.auth.uid == userId;
-  }
-
-  // Helper function to determine if the user is the owner of an *existing* document based on the userId.
-  // This also verifies that the document exists.
-  function isExistingOwner(userId) {
-    return isSignedIn() && isOwner(userId) && resource != null;
   }
 }

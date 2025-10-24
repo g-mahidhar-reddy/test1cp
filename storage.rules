@@ -2,9 +2,13 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow users to read, write, and delete their own files
-    // in folders that match their UID.
-    match /{userId}/{allPaths=**} {
+    // Allow users to read, write, and delete their own files in designated folders.
+    // The {userId} wildcard ensures that a user can only access a folder matching their own UID.
+    match /resumes/{userId}/{allPaths=**} {
+      allow read, write, delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /certificates/{userId}/{allPaths=**} {
       allow read, write, delete: if request.auth != null && request.auth.uid == userId;
     }
   }

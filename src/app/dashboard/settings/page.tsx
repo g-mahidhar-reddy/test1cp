@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -123,79 +124,73 @@ function AccountTab() {
     }
   };
 
- const handleCertificateUpload = () => {
+  const handleCertificateUpload = () => {
     if (!selectedCertFile || !user || !firestore) return;
-
+  
     setIsUploadingCert(true);
-    const certificateId = doc(collection(firestore, 'certificates')).id; // Generate ID upfront
-    const storageRef = ref(storage, `certificates/${user.id}/${certificateId}-${selectedCertFile.name}`);
-
+    const localFile = selectedCertFile; // Keep a local reference
+    const certificateId = doc(collection(firestore, 'certificates')).id;
+    const storageRef = ref(storage, `certificates/${user.id}/${certificateId}-${localFile.name}`);
+  
     // --- Optimistic UI Update ---
-    const tempUrl = URL.createObjectURL(selectedCertFile);
-    const optimisticCert: CertificateType = {
-        id: certificateId,
-        userId: user.id,
-        certificateName: selectedCertFile.name,
-        fileUrl: tempUrl,
-        uploadedAt: new Date(),
+    const tempUrl = URL.createObjectURL(localFile);
+    const optimisticCert: CertificateType & { isOptimistic?: boolean } = {
+      id: certificateId,
+      userId: user.id,
+      certificateName: localFile.name,
+      fileUrl: tempUrl,
+      uploadedAt: new Date(),
+      isOptimistic: true,
     };
     setCertificates(prevCerts => [...prevCerts, optimisticCert]);
-    setSelectedCertFile(null);
-    setIsUploadingCert(false);
+    setSelectedCertFile(null); // Clear input
+    setIsUploadingCert(false); // Unlock the UI immediately
+  
     toast({ title: "Uploading...", description: "Your certificate is being uploaded in the background." });
-
-    // --- Background Processing ---
-    uploadBytes(storageRef, selectedCertFile)
+  
+    // --- Truly Non-Blocking Background Processing ---
+    uploadBytes(storageRef, localFile)
       .then(snapshot => getDownloadURL(snapshot.ref))
       .then(downloadURL => {
         const newCertificateData = {
           userId: user.id,
-          certificateName: selectedCertFile.name,
+          certificateName: localFile.name,
           fileUrl: downloadURL,
           uploadedAt: serverTimestamp(),
         };
-
         const certDocRef = doc(firestore, 'certificates', certificateId);
         
-        // This is a non-blocking write to Firestore
-        setDoc(certDocRef, newCertificateData)
-            .then(() => {
-                toast({
-                    title: "Success!",
-                    description: "Your certificate has been securely saved.",
-                });
-                // Update the optimistic entry with the real URL
-                 setCertificates(prevCerts => prevCerts.map(cert => 
-                    cert.id === certificateId ? { ...cert, fileUrl: downloadURL, isOptimistic: false } : cert
-                ));
-            })
-            .catch(error => {
-                // Handle Firestore write error
-                 toast({
-                    variant: "destructive",
-                    title: "Database Error",
-                    description: "Could not save certificate details to database.",
-                });
-                setCertificates(prevCerts => prevCerts.filter(cert => cert.id !== certificateId));
-                 const permissionError = new FirestorePermissionError({
-                    path: certDocRef.path,
-                    operation: 'create',
-                    requestResourceData: newCertificateData,
-                });
-                errorEmitter.emit('permission-error', permissionError);
-            });
+        // This promise is not awaited in the main function flow
+        return setDoc(certDocRef, newCertificateData).then(() => downloadURL);
       })
-      .catch((error) => {
-        // Handle storage upload error
+      .then((downloadURL) => {
         toast({
-            variant: "destructive",
-            title: "Upload Failed",
-            description: "Could not upload the certificate file.",
+          title: "Success!",
+          description: `${localFile.name} has been securely saved.`,
         });
+        // Finalize the optimistic update with the real URL
+        setCertificates(prevCerts => prevCerts.map(cert =>
+          cert.id === certificateId ? { ...cert, fileUrl: downloadURL, isOptimistic: false } : cert
+        ));
+      })
+      .catch(error => {
+        console.error("Certificate upload failed:", error);
+        toast({
+          variant: "destructive",
+          title: "Upload Failed",
+          description: `Could not upload ${localFile.name}. Please try again.`,
+        });
+        // Revert the optimistic UI update on any failure
         setCertificates(prevCerts => prevCerts.filter(cert => cert.id !== certificateId));
-         const permissionError = new FirestorePermissionError({
-          path: storageRef.fullPath,
-          operation: 'create',
+        
+        // Emit a contextual error for debugging security rules
+        const isStorageError = error.code?.startsWith('storage/');
+        const path = isStorageError ? storageRef.fullPath : `certificates/${certificateId}`;
+        const operation = isStorageError ? 'create' : 'write';
+  
+        const permissionError = new FirestorePermissionError({
+          path: path,
+          operation: operation,
         });
         errorEmitter.emit('permission-error', permissionError);
       });
@@ -723,5 +718,7 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+    
 
     

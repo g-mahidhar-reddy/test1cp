@@ -12,6 +12,7 @@
  */
 
 import {ai} from '@/ai/genkit';
+import {googleAI} from '@genkit-ai/google-genai';
 import {z} from 'genkit';
 
 // Define the schema for a student profile.
@@ -64,6 +65,7 @@ const recommendInternshipsPrompt = ai.definePrompt({
   name: 'recommendInternshipsPrompt',
   input: {schema: RecommendationInputSchema},
   output: {schema: RecommendationOutputSchema},
+  model: googleAI.model('gemini-1.5-flash-preview-0514'),
   prompt: `You are an expert career counselor AI for students. Your task is to recommend internships to students based on their profile and the available internship descriptions.
 
   Analyze the provided student profile:

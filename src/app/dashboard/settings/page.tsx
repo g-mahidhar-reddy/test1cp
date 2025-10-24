@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -96,7 +97,7 @@ function AccountTab() {
     setProfileData(prev => ({ ...prev, [id]: value }));
   };
   
-  const handleSaveProfile = async () => {
+  const handleSaveProfile = () => {
     if (!user || !firestore) return;
     const userDocRef = doc(firestore, 'users', user.id);
     const dataToSave = { ...profileData };
@@ -122,7 +123,7 @@ function AccountTab() {
     }
   };
 
-  const handleCertificateUpload = async () => {
+  const handleCertificateUpload = () => {
     if (!selectedCertFile || !user || !firestore) return;
   
     setIsUploadingCert(true);
@@ -135,44 +136,41 @@ function AccountTab() {
         fileUrl: '', // Will be set after upload
         uploadedAt: serverTimestamp(),
       };
-  
-    try {
-      // 1. Upload file to Storage
-      const snapshot = await uploadBytes(storageRef, selectedCertFile);
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      newCertificateData.fileUrl = downloadURL;
+    
+    // Optimistic UI update
+    setCertificates(prevCerts => [...prevCerts, { ...newCertificateData, id: certificateId, uploadedAt: new Date(), fileUrl: '#' } as CertificateType]);
+    setSelectedCertFile(null);
+    setIsUploadingCert(false);
 
-      // 2. Save metadata to Firestore (non-blocking)
-      setDoc(newCertDocRef, newCertificateData)
-        .then(() => {
-          setCertificates(prevCerts => [...prevCerts, { ...newCertificateData, id: certificateId, uploadedAt: new Date() } as CertificateType]);
-          setSelectedCertFile(null); 
-          toast({
-            title: "Success!",
-            description: "Your certificate has been uploaded.",
-          });
-        })
-        .catch((error) => {
-          const permissionError = new FirestorePermissionError({
-            path: newCertDocRef.path,
-            operation: 'create',
-            requestResourceData: newCertificateData
-          });
-          errorEmitter.emit('permission-error', permissionError);
+    // Start upload in the background
+    uploadBytes(storageRef, selectedCertFile)
+      .then(snapshot => getDownloadURL(snapshot.ref))
+      .then(downloadURL => {
+        newCertificateData.fileUrl = downloadURL;
+        return setDoc(newCertDocRef, newCertificateData);
+      })
+      .then(() => {
+        // Update optimistic entry with real URL
+        setCertificates(prevCerts => prevCerts.map(cert => 
+            cert.id === certificateId ? { ...cert, fileUrl: newCertificateData.fileUrl } : cert
+        ));
+        toast({
+          title: "Success!",
+          description: "Your certificate has been uploaded.",
         });
-  
-    } catch (error: any) {
-      console.error('Certificate upload failed during storage phase:', error);
-      // This catch block is primarily for the storage upload part
-       const permissionError = new FirestorePermissionError({
-        path: storageRef.fullPath,
-        operation: 'write',
-        requestResourceData: { name: selectedCertFile.name, size: selectedCertFile.size, contentType: selectedCertFile.type },
+      })
+      .catch((error) => {
+        // Revert optimistic update on failure
+        setCertificates(prevCerts => prevCerts.filter(cert => cert.id !== certificateId));
+        
+        const isStorageError = error.code && error.code.startsWith('storage/');
+        const permissionError = new FirestorePermissionError({
+          path: isStorageError ? storageRef.fullPath : newCertDocRef.path,
+          operation: 'create',
+          requestResourceData: isStorageError ? undefined : newCertificateData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
       });
-      errorEmitter.emit('permission-error', permissionError);
-    } finally {
-      setIsUploadingCert(false);
-    }
   };
 
   const handleAddSkill = (skill: string) => {
@@ -192,7 +190,7 @@ function AccountTab() {
     setUserSkills(userSkills.filter(skill => skill.name !== skillToRemove));
   };
   
-  const handleSaveSkills = async () => {
+  const handleSaveSkills = () => {
     if (!user || !firestore) return;
     const userDocRef = doc(firestore, 'users', user.id);
     const dataToSave = { skills: userSkills };
@@ -212,41 +210,36 @@ function AccountTab() {
       });
   };
 
-  const handleDeleteCertificate = async (certificate: CertificateType) => {
+  const handleDeleteCertificate = (certificate: CertificateType) => {
     if (!user || !firestore) return;
 
     const certDocRef = doc(firestore, 'certificates', certificate.id);
     const fileRef = ref(storage, certificate.fileUrl);
 
-    try {
-        // Attempt to delete the file from Storage first
-        await deleteObject(fileRef);
+    // Optimistically remove from UI
+    const originalCerts = certificates;
+    setCertificates(certificates.filter(c => c.id !== certificate.id));
 
-        // Then delete the Firestore document (non-blocking)
-        deleteDoc(certDocRef)
-            .then(() => {
-                setCertificates(certificates.filter(c => c.id !== certificate.id));
-                toast({
-                    title: "Certificate Deleted",
-                    description: `${certificate.certificateName} has been removed.`,
-                });
-            })
-            .catch((error) => {
-                const permissionError = new FirestorePermissionError({
-                    path: certDocRef.path,
-                    operation: 'delete',
-                });
-                errorEmitter.emit('permission-error', permissionError);
-            });
-            
-    } catch (error: any) {
-        console.error("Error deleting certificate file from storage:", error);
-        const permissionError = new FirestorePermissionError({
-            path: fileRef.fullPath,
-            operation: 'delete',
-        });
-        errorEmitter.emit('permission-error', permissionError);
-    }
+    deleteObject(fileRef)
+      .then(() => {
+          return deleteDoc(certDocRef);
+      })
+      .then(() => {
+          toast({
+              title: "Certificate Deleted",
+              description: `${certificate.certificateName} has been removed.`,
+          });
+      })
+      .catch((error: any) => {
+          // Revert UI on failure
+          setCertificates(originalCerts);
+          const isStorageError = error.code && error.code.startsWith('storage/');
+          const permissionError = new FirestorePermissionError({
+              path: isStorageError ? fileRef.fullPath : certDocRef.path,
+              operation: 'delete',
+          });
+          errorEmitter.emit('permission-error', permissionError);
+      });
   };
 
 
@@ -702,3 +695,5 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+    

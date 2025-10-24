@@ -8,6 +8,14 @@ export interface User {
   avatarUrl?: string;
   college?: string; // For students and faculty
   company?: string; // For industry partners
+  phone?: string;
+  branch?: string;
+  semester?: number;
+  gpa?: number;
+  skills?: string[];
+  certifications?: string[];
+  linkedinUrl?: string;
+  portfolioUrl?: string;
 }
 
 export interface Internship {

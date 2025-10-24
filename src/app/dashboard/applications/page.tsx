@@ -17,20 +17,36 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuLabel, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/auth-context";
 import { useCollection } from "@/firebase/firestore/use-collection";
-import { collection, query, orderBy } from "firebase/firestore";
+import { collection, query, orderBy, doc, deleteDoc } from "firebase/firestore";
 import { useFirestore } from "@/firebase";
 import type { Application } from "@/lib/types";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { FirestorePermissionError } from "@/firebase/errors";
+import { errorEmitter } from "@/firebase/error-emitter";
 
 function StudentApplicationsView() {
   const { user } = useAuth();
   const firestore = useFirestore();
+  const { toast } = useToast();
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   const applicationsQuery = useMemo(() => {
     if (!user || !firestore) return null;
@@ -51,6 +67,29 @@ function StudentApplicationsView() {
     }
     return 'N/A';
   };
+
+  const handleWithdraw = async (applicationId: string) => {
+    if (!user || !firestore) return;
+
+    setIsDeleting(applicationId);
+    const appDocRef = doc(firestore, `users/${user.id}/applications`, applicationId);
+
+    try {
+      await deleteDoc(appDocRef);
+      toast({
+        title: "Application Withdrawn",
+        description: "Your application has been successfully withdrawn.",
+      });
+    } catch (error) {
+       const permissionError = new FirestorePermissionError({
+        path: appDocRef.path,
+        operation: 'delete',
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    } finally {
+      setIsDeleting(null);
+    }
+  };
   
   return (
     <Card>
@@ -65,13 +104,14 @@ function StudentApplicationsView() {
               <TableHead>Internship</TableHead>
               <TableHead>Company</TableHead>
               <TableHead>Applied On</TableHead>
-              <TableHead className="text-right">Status</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center">
+                <TableCell colSpan={5} className="h-24 text-center">
                   Loading your applications...
                 </TableCell>
               </TableRow>
@@ -81,14 +121,37 @@ function StudentApplicationsView() {
                   <TableCell className="font-medium">{app.internshipDetails?.title}</TableCell>
                   <TableCell>{app.internshipDetails?.companyName}</TableCell>
                   <TableCell>{formatDate(app.appliedDate)}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell>
                     <Badge variant={app.status === 'accepted' ? 'default' : app.status === 'rejected' ? 'destructive' : 'secondary'}>{app.status}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                         <Button variant="destructive" size="sm" disabled={isDeleting === app.id}>
+                          {isDeleting === app.id ? 'Withdrawing...' : 'Withdraw'}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This action cannot be undone. This will permanently withdraw your application for the <strong>{app.internshipDetails?.title}</strong> internship.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleWithdraw(app.id)}>
+                            Confirm Withdraw
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </TableCell>
                 </TableRow>
               ))
             ) : (
                <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center">
+                <TableCell colSpan={5} className="h-24 text-center">
                   You haven't applied to any internships yet.
                 </TableCell>
               </TableRow>

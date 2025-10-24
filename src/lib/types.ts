@@ -1,4 +1,5 @@
 
+
 export type UserRole = 'student' | 'faculty' | 'industry';
 
 export interface User {
@@ -13,7 +14,7 @@ export interface User {
   branch?: string;
   semester?: number;
   gpa?: number;
-  skills?: string[];
+  skills?: { name: string, level?: string, type?: string }[];
   certifications?: string[];
   linkedinUrl?: string;
   portfolioUrl?: string;
@@ -71,3 +72,5 @@ export interface Certificate {
   fileUrl: string;
   uploadedAt: any; // Firestore ServerTimestamp
 }
+
+    

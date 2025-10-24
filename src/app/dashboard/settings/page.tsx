@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -28,10 +29,9 @@ import { useFirebase } from "@/firebase/provider";
 import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import type { Certificate as CertificateType } from "@/lib/types";
+import type { Certificate as CertificateType, Skill } from "@/lib/types";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
-import { Skill } from '@/lib/types';
 
 
 const predefinedSkills = {
@@ -108,22 +108,22 @@ function AccountTab() {
   };
   
   const handleSaveSkills = async () => {
-      if (!user) return;
-      const userDocRef = doc(firestore, 'users', user.id);
-      const dataToSave = { skills: userSkills };
+    if (!user) return;
+    const userDocRef = doc(firestore, 'users', user.id);
+    const dataToSave = { skills: userSkills.map(s => ({name: s.name})) };
       
-      setDoc(userDocRef, dataToSave, { merge: true })
-          .then(() => {
-              toast({ title: "Success", description: "Your skills have been updated." });
-          })
-          .catch((error) => {
-              const permissionError = new FirestorePermissionError({
-                  path: userDocRef.path,
-                  operation: 'update',
-                  requestResourceData: dataToSave,
-              });
-              errorEmitter.emit('permission-error', permissionError);
-          });
+    setDoc(userDocRef, dataToSave, { merge: true })
+        .then(() => {
+            toast({ title: "Success", description: "Your skills have been updated." });
+        })
+        .catch((error) => {
+            const permissionError = new FirestorePermissionError({
+                path: userDocRef.path,
+                operation: 'update',
+                requestResourceData: dataToSave,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
   };
 
   const handleDeleteCertificate = async (certificate: CertificateType) => {

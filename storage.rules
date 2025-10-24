@@ -2,13 +2,19 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow users to read, write, and delete their own resumes and certificates.
-    // The {userId} wildcard in the path must match the UID of the authenticated user.
-    match /resumes/{userId}/{allPaths=**} {
+    // Match any file path
+    match /{allPaths=**} {
+      // Default deny all access
+      allow read, write: if false;
+    }
+
+    // Allow users to manage their own resume files
+    match /resumes/{userId}/{fileName} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    match /certificates/{userId}/{allPaths=**} {
+    // Allow users to manage their own certificate files
+    match /certificates/{userId}/{fileName} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }

@@ -95,60 +95,65 @@ function AccountTab() {
 
   const handleCertificateUpload = async () => {
     if (!selectedCertFile || !user || !firestore) return;
-
+  
     setIsUploadingCert(true);
-    const newCertDocRef = doc(collection(firestore, 'certificates')); 
+    const newCertDocRef = doc(collection(firestore, 'certificates'));
     const certificateId = newCertDocRef.id;
     const storageRef = ref(storage, `certificates/${user.id}/${certificateId}-${selectedCertFile.name}`);
-
+  
     try {
-        const snapshot = await uploadBytes(storageRef, selectedCertFile);
-        const downloadURL = await getDownloadURL(snapshot.ref);
-
-        const newCertificate: Omit<CertificateType, 'id'> & { uploadedAt: any } = {
+      // 1. Upload file to Firebase Storage
+      const snapshot = await uploadBytes(storageRef, selectedCertFile);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+  
+      // 2. Create certificate metadata to save in Firestore
+      const newCertificate: Omit<CertificateType, 'id'> = {
+        userId: user.id,
+        certificateName: selectedCertFile.name,
+        fileUrl: downloadURL,
+        uploadedAt: serverTimestamp(),
+      };
+  
+      // 3. Save metadata to Firestore
+      await setDoc(newCertDocRef, newCertificate);
+  
+      // 4. Update UI state on success
+      setCertificates(prevCerts => [...prevCerts, { ...newCertificate, id: certificateId, uploadedAt: new Date() } as CertificateType]);
+      setSelectedCertFile(null);
+      toast({
+        title: "Success!",
+        description: "Your certificate has been uploaded.",
+      });
+  
+    } catch (error: any) {
+      console.error('Certificate upload failed:', error);
+  
+      // Check if it's a Firestore permission error
+      if (error.code && (error.code.includes('permission-denied') || error.code.includes('unauthenticated'))) {
+        const permissionError = new FirestorePermissionError({
+          path: newCertDocRef.path,
+          operation: 'create',
+          requestResourceData: {
             userId: user.id,
             certificateName: selectedCertFile.name,
-            fileUrl: downloadURL,
-            uploadedAt: serverTimestamp(),
-        };
-
-        setDoc(newCertDocRef, newCertificate)
-            .then(() => {
-                setCertificates(prevCerts => [...prevCerts, { ...newCertificate, id: certificateId, uploadedAt: new Date() }]);
-                setSelectedCertFile(null);
-                toast({
-                    title: "Success!",
-                    description: "Your certificate has been uploaded.",
-                });
-            })
-            .catch((error) => {
-                console.error('Firestore write failed:', error);
-                const permissionError = new FirestorePermissionError({
-                    path: newCertDocRef.path,
-                    operation: 'create',
-                    requestResourceData: newCertificate,
-                });
-                errorEmitter.emit('permission-error', permissionError);
-                toast({
-                    variant: "destructive",
-                    title: "Upload failed",
-                    description: "Could not save certificate details. Please check permissions.",
-                });
-            })
-            .finally(() => {
-                setIsUploadingCert(false);
-            });
-
-    } catch (uploadError) {
-        console.error('File upload to storage failed:', uploadError);
-        toast({
-            variant: "destructive",
-            title: "Upload failed",
-            description: "There was a problem uploading your certificate file.",
+            fileUrl: '--- URL would be here ---',
+            uploadedAt: '--- Server timestamp ---'
+          },
         });
-        setIsUploadingCert(false);
+        errorEmitter.emit('permission-error', permissionError);
+      }
+      
+      toast({
+        variant: "destructive",
+        title: "Upload failed",
+        description: error.message || "Could not upload certificate. Please try again.",
+      });
+  
+    } finally {
+      // 5. Ensure loading state is always reset
+      setIsUploadingCert(false);
     }
-};
+  };
 
 
   if (!user) {
@@ -675,5 +680,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-
-    

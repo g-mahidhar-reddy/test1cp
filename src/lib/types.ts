@@ -48,9 +48,9 @@ export interface Application {
   internshipId: string;
   studentId: string;
   status: ApplicationStatus;
-  appliedDate: string;
+  appliedDate: any; // Can be a server timestamp
   feedback?: string;
-  internshipDetails?: Internship; // denormalized for easier display
+  internshipDetails?: Partial<Internship>; // denormalized for easier display
   studentDetails?: Pick<User, 'id' | 'name' | 'email' | 'college' | 'avatarUrl'>; // denormalized
 }
 

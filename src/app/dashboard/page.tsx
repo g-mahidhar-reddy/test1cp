@@ -1,3 +1,5 @@
+'use client';
+
 import {
   Activity,
   ArrowUpRight,
@@ -22,13 +24,14 @@ import {
 } from "@/components/ui/table";
 import { StatCard } from "@/components/stat-card";
 import { OverviewChart } from "@/components/overview-chart";
-import { mockApplications } from "@/lib/data";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-
-// This would come from useAuth() in a client component
-const userRole = "student"; // 'student', 'faculty', 'industry'
-const userId = "student1"; // This would also come from the user object
+import { useAuth } from "@/contexts/auth-context";
+import { useCollection } from "@/firebase";
+import { useMemo } from "react";
+import { collection, query, orderBy, limit } from "firebase/firestore";
+import { useFirestore } from "@/firebase";
+import type { Application } from "@/lib/types";
 
 const studentStats = [
   {
@@ -83,11 +86,22 @@ const getStats = (role: string) => {
 };
 
 export default function DashboardPage() {
-  const stats = getStats(userRole);
+  const { user } = useAuth();
+  const firestore = useFirestore();
+  const role = user?.role || "student";
+  const stats = getStats(role);
   
-  // Filter applications for the current user and take the most recent 5.
-  const myApplications = mockApplications.filter(app => app.studentId === userId);
-  const recentApplications = myApplications.slice(0, 5);
+  const applicationsQuery = useMemo(() => {
+    if (!user || !firestore) return null;
+    return query(
+      collection(firestore, `users/${user.id}/applications`),
+      orderBy('appliedDate', 'desc'),
+      limit(5)
+    );
+  }, [user, firestore]);
+
+  const { data: recentApplications, isLoading: isLoadingApplications } = useCollection<Application>(applicationsQuery);
+  const totalApplicationsCount = recentApplications?.length || 0; // This will only be max 5, a full count is needed for real stats
 
   return (
     <>
@@ -112,7 +126,7 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>Recent Applications</CardTitle>
             <CardDescription>
-              You have {myApplications.length} total applications.
+              Displaying your last {totalApplicationsCount} applications.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -124,26 +138,40 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recentApplications.map((app) => (
-                  <TableRow key={app.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="hidden h-9 w-9 sm:flex">
-                           <AvatarImage src={app.internshipDetails?.companyLogoUrl} alt="Avatar" />
-                           <AvatarFallback>
-                            {app.internshipDetails?.companyName.substring(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="font-medium">{app.internshipDetails?.companyName}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                       <Badge variant={app.status === 'accepted' ? 'default' : app.status === 'rejected' ? 'destructive' : 'secondary'}>
-                        {app.status}
-                      </Badge>
+                {isLoadingApplications ? (
+                   <TableRow>
+                    <TableCell colSpan={2} className="h-24 text-center">
+                      Loading...
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : recentApplications && recentApplications.length > 0 ? (
+                  recentApplications.map((app) => (
+                    <TableRow key={app.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="hidden h-9 w-9 sm:flex">
+                            <AvatarImage src={app.internshipDetails?.companyLogoUrl} alt="Avatar" />
+                            <AvatarFallback>
+                              {app.internshipDetails?.companyName?.substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="font-medium">{app.internshipDetails?.companyName}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={app.status === 'accepted' ? 'default' : app.status === 'rejected' ? 'destructive' : 'secondary'}>
+                          {app.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={2} className="h-24 text-center">
+                      No recent applications found.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
@@ -71,11 +72,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth) return;
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // User state will be updated by the useEffect hook watching firebaseUser
       router.push('/dashboard');
-    } catch (error) {
-      console.error("Failed to sign in:", error);
-      // Handle login errors (e.g., show a toast)
+    } catch (error: any) {
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
+        // If user doesn't exist, create them
+        try {
+          await createUserWithEmailAndPassword(auth, email, password);
+          router.push('/dashboard');
+        } catch (signupError) {
+          console.error("Failed to sign up after failed login:", signupError);
+        }
+      } else {
+        console.error("Failed to sign in:", error);
+      }
     }
   };
 

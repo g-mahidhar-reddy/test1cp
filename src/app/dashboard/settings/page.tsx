@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import {
@@ -24,11 +23,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from "@/firebase/provider";
-import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from "firebase/storage";
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
-import { doc, setDoc, getDoc, updateDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, collection, addDoc, serverTimestamp, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import type { Certificate as CertificateType, Skill } from "@/lib/types";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -57,20 +56,20 @@ function AccountTab() {
   const [isUploadingCert, setIsUploadingCert] = useState(false);
 
   const fetchCertificates = useCallback(async () => {
-    if (!user) return;
-    const certsRef = doc(firestore, 'users', user.id);
+    if (!user || !firestore) return;
+    const certsCollectionRef = collection(firestore, 'certificates');
+    const q = query(certsCollectionRef, where("userId", "==", user.id));
     try {
-      const docSnap = await getDoc(certsRef);
-      if (docSnap.exists() && docSnap.data().certificates) {
-        setCertificates(docSnap.data().certificates || []);
-      }
+      const querySnapshot = await getDocs(q);
+      const userCertificates = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CertificateType));
+      setCertificates(userCertificates);
     } catch (error) {
       console.error("Error fetching certificates:", error);
     }
   }, [user, firestore]);
 
   const fetchSkills = useCallback(async () => {
-    if (!user) return;
+    if (!user || !firestore) return;
     const userDocRef = doc(firestore, 'users', user.id);
     try {
         const docSnap = await getDoc(userDocRef);
@@ -96,31 +95,28 @@ function AccountTab() {
   };
 
   const handleCertificateUpload = async () => {
-    if (!selectedCertFile || !user) return;
+    if (!selectedCertFile || !user || !firestore) return;
 
     setIsUploadingCert(true);
-    const certificateId = doc(collection(firestore, 'id')).id;
+    const certificateId = doc(collection(firestore, 'id')).id; // Generate a new ID
     const storageRef = ref(storage, `certificates/${user.id}/${certificateId}-${selectedCertFile.name}`);
 
     try {
       const snapshot = await uploadBytes(storageRef, selectedCertFile);
       const downloadURL = await getDownloadURL(snapshot.ref);
 
-      const newCertificate: CertificateType = {
-        id: certificateId,
+      const newCertificate: Omit<CertificateType, 'id'> = {
         userId: user.id,
         certificateName: selectedCertFile.name,
         fileUrl: downloadURL,
         uploadedAt: serverTimestamp(),
       };
-
-      const userDocRef = doc(firestore, 'users', user.id);
-      const updatedCertificates = [...certificates, newCertificate];
-      const dataToSave = { certificates: updatedCertificates };
-
-      await setDoc(userDocRef, dataToSave, { merge: true });
-
-      setCertificates(updatedCertificates);
+      
+      const certDocRef = doc(firestore, 'certificates', certificateId);
+      await setDoc(certDocRef, newCertificate);
+      
+      // Add the new certificate to the local state with the generated ID
+      setCertificates(prevCerts => [...prevCerts, { ...newCertificate, id: certificateId, uploadedAt: new Date() }]);
       setSelectedCertFile(null);
 
       toast({
@@ -131,7 +127,7 @@ function AccountTab() {
     } catch (error) {
         console.error('Upload failed:', error);
         const permissionError = new FirestorePermissionError({
-            path: `certificates/${user.id}/${certificateId}-${selectedCertFile.name}`,
+            path: `certificates/${certificateId}`,
             operation: 'create',
         });
         errorEmitter.emit('permission-error', permissionError);
@@ -168,7 +164,7 @@ function AccountTab() {
   };
   
   const handleSaveSkills = async () => {
-    if (!user) return;
+    if (!user || !firestore) return;
     const userDocRef = doc(firestore, 'users', user.id);
     const dataToSave = { skills: userSkills.map(s => ({name: s.name})) };
       
@@ -187,37 +183,40 @@ function AccountTab() {
   };
 
   const handleDeleteCertificate = async (certificate: CertificateType) => {
-    if (!user) return;
+    if (!user || !firestore) return;
 
-    // 1. Delete the file from Firebase Storage
-    const fileRef = ref(storage, certificate.fileUrl);
-    await deleteObject(fileRef).catch(error => {
-      // Even if storage deletion fails, we try to update Firestore
-      console.error("Error deleting from storage, proceeding to Firestore:", error);
-    });
+    try {
+        // 1. Delete the Firestore document
+        const certDocRef = doc(firestore, 'certificates', certificate.id);
+        await deleteDoc(certDocRef);
 
-    // 2. Remove the certificate metadata from Firestore
-    const updatedCertificates = certificates.filter(c => c.id !== certificate.id);
-    const certsDocRef = doc(firestore, 'users', user.id);
-    const dataToSave = { certificates: updatedCertificates };
-    
-    setDoc(certsDocRef, dataToSave, { merge: true })
-      .then(() => {
-        setCertificates(updatedCertificates);
+        // 2. Delete the file from Firebase Storage
+        const fileRef = ref(storage, certificate.fileUrl);
+        await deleteObject(fileRef);
+
+        // 3. Update local state
+        setCertificates(certificates.filter(c => c.id !== certificate.id));
+
         toast({
-          title: "Certificate Deleted",
-          description: `${certificate.certificateName} has been removed.`,
+            title: "Certificate Deleted",
+            description: `${certificate.certificateName} has been removed.`,
         });
-      })
-      .catch((error) => {
-          const permissionError = new FirestorePermissionError({
-              path: certsDocRef.path,
-              operation: 'update',
-              requestResourceData: dataToSave,
-          });
-          errorEmitter.emit('permission-error', permissionError);
-      });
+
+    } catch (error) {
+        console.error("Error deleting certificate:", error);
+        const permissionError = new FirestorePermissionError({
+            path: `certificates/${certificate.id}`,
+            operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        toast({
+            variant: "destructive",
+            title: "Deletion failed",
+            description: "Could not delete the certificate. Please try again.",
+        });
+    }
   };
+
 
   return (
     <div className="space-y-8">
@@ -668,4 +667,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-

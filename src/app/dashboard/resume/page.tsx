@@ -19,6 +19,8 @@ import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } f
 import { useToast } from '@/hooks/use-toast';
 import { parseResume } from '@/ai/flows/parse-resume-flow';
 import { doc, setDoc } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function ResumePage() {
   const { user, setUser } = useAuth();
@@ -118,14 +120,25 @@ export default function ResumePage() {
                 combinedSkills.push(newSkill);
             }
         });
-
-        await setDoc(userDocRef, { skills: combinedSkills }, { merge: true });
-        setUser(prev => prev ? { ...prev, skills: combinedSkills } : null);
         
-        toast({
-          title: "Skills Updated!",
-          description: `We've added ${parsedData.skills.length} skills from your resume to your profile.`,
-        });
+        const dataToSave = { skills: combinedSkills };
+        setDoc(userDocRef, dataToSave, { merge: true })
+          .then(() => {
+              setUser(prev => prev ? { ...prev, skills: combinedSkills } : null);
+              toast({
+                title: "Skills Updated!",
+                description: `We've added ${parsedData.skills.length} skills from your resume to your profile.`,
+              });
+          })
+          .catch((error) => {
+              const permissionError = new FirestorePermissionError({
+                path: userDocRef.path,
+                operation: 'update',
+                requestResourceData: dataToSave,
+              });
+              errorEmitter.emit('permission-error', permissionError);
+          });
+
       } else {
          toast({
           title: "Analysis Complete",
@@ -136,11 +149,11 @@ export default function ResumePage() {
       setSelectedFile(null); // Clear the file input
 
     } catch (error) {
-      console.error('Upload and parse failed:', error);
+      console.error('Upload failed:', error);
       toast({
         variant: "destructive",
         title: "Upload failed",
-        description: "There was a problem processing your resume. Please try again.",
+        description: "There was a problem uploading your resume file. Please try again.",
       });
     } finally {
       setIsUploading(false);

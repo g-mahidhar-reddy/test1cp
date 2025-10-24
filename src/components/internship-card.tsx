@@ -8,9 +8,9 @@ import {
 } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import type { Internship } from "@/lib/types";
 import { MapPin, Clock, IndianRupee, Star } from "lucide-react";
+import { ApplyInternshipDialog } from "./apply-internship-dialog";
 
 export function InternshipCard({ internship }: { internship: Internship }) {
   return (
@@ -45,6 +45,9 @@ export function InternshipCard({ internship }: { internship: Internship }) {
             <IndianRupee className="h-4 w-4" />
             <span>{internship.stipend}</span>
           </div>
+           <div className="flex items-center gap-2">
+            <Badge variant="outline">Credits: {internship.credits}</Badge>
+          </div>
         </div>
         <div>
           <h4 className="mb-2 text-sm font-medium">Skills</h4>
@@ -58,12 +61,7 @@ export function InternshipCard({ internship }: { internship: Internship }) {
         </div>
       </CardContent>
       <CardFooter className="border-t p-4">
-        <div className="flex w-full items-center gap-2">
-          <Button variant="outline" className="w-full">
-            View Details
-          </Button>
-          <Button className="w-full">Apply Now</Button>
-        </div>
+        <ApplyInternshipDialog internship={internship} />
       </CardFooter>
     </Card>
   );

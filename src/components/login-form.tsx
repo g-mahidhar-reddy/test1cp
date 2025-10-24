@@ -12,16 +12,18 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import React from 'react';
 
 export function LoginForm() {
   const { login } = useAuth();
+  const [email, setEmail] = React.useState('student@example.com');
+  const [password, setPassword] = React.useState('password');
 
-  // Mock form submission
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // In a real app, you'd get email/password and call Firebase auth
-    // For this mock, we'll just log in as a student by default.
-    login('student');
+    // For now, role is hardcoded as student for login. A real app might have a role selector
+    // or determine it from the backend.
+    login('student', email, password);
   };
 
   return (
@@ -41,7 +43,8 @@ export function LoginForm() {
               type="email"
               placeholder="m@example.com"
               required
-              defaultValue="student@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
           </div>
           <div className="grid gap-2">
@@ -51,7 +54,13 @@ export function LoginForm() {
                 Forgot your password?
               </Link>
             </div>
-            <Input id="password" type="password" required defaultValue="password" />
+            <Input 
+              id="password" 
+              type="password" 
+              required 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
           <Button type="submit" className="w-full">
             Login

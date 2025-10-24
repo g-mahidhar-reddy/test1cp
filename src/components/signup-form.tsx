@@ -17,12 +17,15 @@ import type { UserRole } from '@/lib/types';
 import React from 'react';
 
 export function SignupForm() {
-  const { login } = useAuth();
+  const { signup } = useAuth();
   const [role, setRole] = React.useState<UserRole>('student');
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [name, setName] = React.useState('');
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    login(role);
+    signup(role, email, password, name);
   };
 
   return (
@@ -37,7 +40,13 @@ export function SignupForm() {
         <form onSubmit={handleSubmit} className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="full-name">Full Name</Label>
-            <Input id="full-name" placeholder="Aarav Sharma" required />
+            <Input 
+              id="full-name" 
+              placeholder="Aarav Sharma" 
+              required 
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="email">Email</Label>
@@ -46,11 +55,19 @@ export function SignupForm() {
               type="email"
               placeholder="m@example.com"
               required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" required />
+            <Input 
+              id="password" 
+              type="password" 
+              required 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
           
           <div className="grid gap-2">

@@ -23,11 +23,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useFirebase } from "@/firebase/provider";
+import { useFirebase, useFirestore as useFirebaseFirestore } from '@/firebase/provider';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
 import { doc, setDoc, getDoc, updateDoc, collection, addDoc, serverTimestamp, query, where, getDocs, deleteDoc } from 'firebase/firestore';
-import type { Certificate as CertificateType, Skill } from "@/lib/types";
+import type { Certificate as CertificateType, Skill, User as UserType } from "@/lib/types";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 
@@ -41,18 +41,35 @@ const predefinedSkills = {
 
 
 function AccountTab() {
-  const { user } = useAuth();
-  const { firestore } = useFirebase();
+  const { user, setUser } = useAuth();
+  const firestore = useFirebaseFirestore();
   const { toast } = useToast();
+  
+  const [profileData, setProfileData] = useState<Partial<UserType>>({});
   const [userSkills, setUserSkills] = useState<Skill[]>([]);
   const [customSkillInput, setCustomSkillInput] = useState('');
-
+  
   const [certificates, setCertificates] = useState<CertificateType[]>([]);
   const { firebaseApp } = useFirebase();
   const storage = getStorage(firebaseApp);
   
   const [selectedCertFile, setSelectedCertFile] = useState<File | null>(null);
   const [isUploadingCert, setIsUploadingCert] = useState(false);
+
+  const fetchUserData = useCallback(async () => {
+    if (!user || !firestore) return;
+    const userDocRef = doc(firestore, 'users', user.id);
+    try {
+      const docSnap = await getDoc(userDocRef);
+      if (docSnap.exists()) {
+        const userData = docSnap.data() as UserType;
+        setProfileData(userData);
+        setUserSkills(userData.skills || []);
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    }
+  }, [user, firestore]);
 
   const fetchCertificates = useCallback(async () => {
     if (!user || !firestore) return;
@@ -67,26 +84,35 @@ function AccountTab() {
     }
   }, [user, firestore]);
 
-  const fetchSkills = useCallback(async () => {
+  useEffect(() => {
+    if (user) {
+      fetchUserData();
+      fetchCertificates();
+    }
+  }, [user, fetchUserData, fetchCertificates]);
+
+  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { id, value } = e.target;
+    setProfileData(prev => ({ ...prev, [id]: value }));
+  };
+  
+  const handleSaveProfile = async () => {
     if (!user || !firestore) return;
     const userDocRef = doc(firestore, 'users', user.id);
     try {
-        const docSnap = await getDoc(userDocRef);
-        if (docSnap.exists() && docSnap.data().skills) {
-            setUserSkills(docSnap.data().skills);
-        }
+      await setDoc(userDocRef, profileData, { merge: true });
+      setUser(prev => prev ? ({ ...prev, ...profileData }) : null);
+      toast({ title: "Success", description: "Your profile has been updated." });
     } catch (error) {
-        console.error("Error fetching skills:", error);
+       const permissionError = new FirestorePermissionError({
+        path: userDocRef.path,
+        operation: 'update',
+        requestResourceData: profileData,
+      });
+      errorEmitter.emit('permission-error', permissionError);
     }
-  }, [user, firestore]);
+  };
 
-  useEffect(() => {
-    if (user) {
-      fetchCertificates();
-      fetchSkills();
-    }
-  }, [user, fetchCertificates, fetchSkills]);
-  
   const handleCertificateFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedCertFile(e.target.files[0]);
@@ -97,16 +123,14 @@ function AccountTab() {
     if (!selectedCertFile || !user || !firestore) return;
   
     setIsUploadingCert(true);
-    const newCertDocRef = doc(collection(firestore, 'certificates')); // Generate ID upfront
+    const newCertDocRef = doc(collection(firestore, 'certificates'));
     const certificateId = newCertDocRef.id;
     const storageRef = ref(storage, `certificates/${user.id}/${certificateId}-${selectedCertFile.name}`);
   
     try {
-      // 1. Upload file to Firebase Storage
       const snapshot = await uploadBytes(storageRef, selectedCertFile);
       const downloadURL = await getDownloadURL(snapshot.ref);
   
-      // 2. Create certificate metadata
       const newCertificateData: Omit<CertificateType, 'id'> = {
         userId: user.id,
         certificateName: selectedCertFile.name,
@@ -114,12 +138,10 @@ function AccountTab() {
         uploadedAt: serverTimestamp(),
       };
   
-      // 3. Save metadata to Firestore
       await setDoc(newCertDocRef, newCertificateData);
   
-      // 4. Update UI state on success
       setCertificates(prevCerts => [...prevCerts, { ...newCertificateData, id: certificateId, uploadedAt: new Date() } as CertificateType]);
-      setSelectedCertFile(null); // Clear file input display
+      setSelectedCertFile(null); 
       toast({
         title: "Success!",
         description: "Your certificate has been uploaded.",
@@ -128,44 +150,31 @@ function AccountTab() {
     } catch (error: any) {
       console.error('Certificate upload failed:', error);
   
-      // This is a generic way to check for storage permission errors
       if (error.code === 'storage/unauthorized' || error.code === 'storage/retry-limit-exceeded') {
         const permissionError = new FirestorePermissionError({
-          path: storageRef.fullPath, // Use storage path
-          operation: 'write', // Storage operations are simplified to 'write' for this context
-          requestResourceData: {
-            name: selectedCertFile.name,
-            size: selectedCertFile.size,
-            contentType: selectedCertFile.type
-          },
+          path: storageRef.fullPath,
+          operation: 'write',
+          requestResourceData: { name: selectedCertFile.name, size: selectedCertFile.size, contentType: selectedCertFile.type },
         });
         errorEmitter.emit('permission-error', permissionError);
       } else if (error.code && (error.code.includes('permission-denied') || error.code.includes('unauthenticated'))) {
-         // This handles Firestore permission errors on setDoc
          const permissionError = new FirestorePermissionError({
           path: newCertDocRef.path,
           operation: 'create',
-          requestResourceData: { userId: user.id, certificateName: selectedCertFile.name } // Example data
+          requestResourceData: { userId: user.id, certificateName: selectedCertFile.name }
         });
         errorEmitter.emit('permission-error', permissionError);
+      } else {
+        toast({
+            variant: "destructive",
+            title: "Upload failed",
+            description: error.message || "Could not upload certificate. Please try again.",
+        });
       }
-      
-      toast({
-        variant: "destructive",
-        title: "Upload failed",
-        description: error.message || "Could not upload certificate. Please try again.",
-      });
-  
     } finally {
-      // 5. Ensure loading state is always reset
       setIsUploadingCert(false);
     }
   };
-
-
-  if (!user) {
-    return null;
-  }
 
   const handleAddSkill = (skill: string) => {
     if (skill && !userSkills.some(s => s.name === skill)) {
@@ -187,10 +196,11 @@ function AccountTab() {
   const handleSaveSkills = async () => {
     if (!user || !firestore) return;
     const userDocRef = doc(firestore, 'users', user.id);
-    const dataToSave = { skills: userSkills.map(s => ({name: s.name})) };
+    const dataToSave = { skills: userSkills };
       
     setDoc(userDocRef, dataToSave, { merge: true })
         .then(() => {
+            setUser(prev => prev ? ({ ...prev, skills: userSkills }) : null);
             toast({ title: "Success", description: "Your skills have been updated." });
         })
         .catch((error) => {
@@ -210,8 +220,8 @@ function AccountTab() {
     const fileRef = ref(storage, certificate.fileUrl);
 
     try {
-        await deleteObject(fileRef);
         await deleteDoc(certDocRef);
+        await deleteObject(fileRef);
 
         setCertificates(certificates.filter(c => c.id !== certificate.id));
 
@@ -225,16 +235,17 @@ function AccountTab() {
         
         let operation: 'delete' = 'delete';
         let path: string = '';
+        let requestResourceData: any = undefined;
+
         if (error.code && error.code.startsWith('storage')) {
           path = certificate.fileUrl; // or a reconstructed path if needed
+          operation = 'delete';
         } else {
           path = `certificates/${certificate.id}`;
+          operation = 'delete';
         }
 
-        const permissionError = new FirestorePermissionError({
-            path: path,
-            operation: operation,
-        });
+        const permissionError = new FirestorePermissionError({ path, operation, requestResourceData });
         errorEmitter.emit('permission-error', permissionError);
         
         toast({
@@ -245,6 +256,10 @@ function AccountTab() {
     }
   };
 
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <div className="space-y-8">
@@ -258,8 +273,8 @@ function AccountTab() {
                  <form className="grid gap-6">
                     <div className="flex items-center gap-6">
                         <Avatar className="h-20 w-20">
-                            <AvatarImage src={user.avatarUrl} alt={user.name} />
-                            <AvatarFallback>{user.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                            <AvatarImage src={profileData.avatarUrl || user.avatarUrl} alt={profileData.name || user.name} />
+                            <AvatarFallback>{(profileData.name || user.name).substring(0, 2).toUpperCase()}</AvatarFallback>
                         </Avatar>
                         <div className="grid gap-2">
                              <Label htmlFor="profile-picture">Profile Picture</Label>
@@ -270,21 +285,21 @@ function AccountTab() {
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="grid gap-2">
                         <Label htmlFor="name">Full Name</Label>
-                        <Input id="name" defaultValue={user.name} />
+                        <Input id="name" value={profileData.name || ''} onChange={handleProfileChange} />
                         </div>
                         <div className="grid gap-2">
                         <Label htmlFor="email">Email</Label>
-                        <Input id="email" type="email" defaultValue={user.email} disabled />
+                        <Input id="email" type="email" value={user.email} disabled />
                         </div>
                     </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="grid gap-2">
                             <Label htmlFor="phone">Phone</Label>
-                            <Input id="phone" defaultValue={user.phone} />
+                            <Input id="phone" value={profileData.phone || ''} onChange={handleProfileChange} />
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="role">Role</Label>
-                            <Input id="role" defaultValue={user.role} disabled />
+                            <Input id="role" value={user.role} disabled />
                         </div>
                     </div>
 
@@ -293,30 +308,30 @@ function AccountTab() {
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                             <div className="grid gap-2">
                             <Label htmlFor="college">College/University</Label>
-                            <Input id="college" defaultValue={user.college} />
+                            <Input id="college" value={profileData.college || ''} onChange={handleProfileChange}/>
                             </div>
                             <div className="grid gap-2">
                             <Label htmlFor="branch">Branch</Label>
-                            <Input id="branch" defaultValue={user.branch} />
+                            <Input id="branch" value={profileData.branch || ''} onChange={handleProfileChange}/>
                             </div>
                             <div className="grid gap-2">
                             <Label htmlFor="semester">Semester</Label>
-                            <Input id="semester" type="number" defaultValue={user.semester} />
+                            <Input id="semester" type="number" value={profileData.semester || ''} onChange={handleProfileChange}/>
                             </div>
                             <div className="grid gap-2">
                             <Label htmlFor="gpa">GPA</Label>
-                            <Input id="gpa" type="number" step="0.1" defaultValue={user.gpa} />
+                            <Input id="gpa" type="number" step="0.1" value={profileData.gpa || ''} onChange={handleProfileChange}/>
                             </div>
                         </div>
                         
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className="grid gap-2">
-                            <Label htmlFor="linkedin">LinkedIn URL</Label>
-                            <Input id="linkedin" defaultValue={user.linkedinUrl} />
+                            <Label htmlFor="linkedinUrl">LinkedIn URL</Label>
+                            <Input id="linkedinUrl" value={profileData.linkedinUrl || ''} onChange={handleProfileChange}/>
                             </div>
                             <div className="grid gap-2">
-                            <Label htmlFor="portfolio">Portfolio URL</Label>
-                            <Input id="portfolio" defaultValue={user.portfolioUrl} />
+                            <Label htmlFor="portfolioUrl">Portfolio URL</Label>
+                            <Input id="portfolioUrl" value={profileData.portfolioUrl || ''} onChange={handleProfileChange}/>
                             </div>
                         </div>
                         </>
@@ -325,14 +340,14 @@ function AccountTab() {
                     {user.role === 'industry' && (
                         <div className="grid gap-2">
                         <Label htmlFor="company">Company</Label>
-                        <Input id="company" defaultValue={user.company} />
+                        <Input id="company" value={profileData.company || ''} onChange={handleProfileChange}/>
                         </div>
                     )}
                 </form>
             </CardContent>
              <CardFooter className="border-t px-6 py-4 flex justify-between items-center">
-                <p className="text-xs text-muted-foreground">Last updated on July 20, 2024</p>
-                <Button>Save Changes</Button>
+                <p className="text-xs text-muted-foreground">Your profile is saved automatically.</p>
+                <Button onClick={handleSaveProfile}>Save Changes</Button>
             </CardFooter>
         </Card>
 
@@ -695,5 +710,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-
-    

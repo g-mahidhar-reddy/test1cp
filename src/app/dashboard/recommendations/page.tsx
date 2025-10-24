@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useTransition, useMemo } from 'react';
 import { Bot, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,29 +8,47 @@ import { InternshipCard } from '@/components/internship-card';
 import { mockInternships } from '@/lib/data';
 import { recommendInternships, type RecommendationInput, type RecommendationOutput, type StudentProfile } from '@/ai/ai-internship-recommendation';
 import { useToast } from '@/hooks/use-toast';
-import type { Internship } from '@/lib/types';
-
-
-// Mock student profile - in a real app, this would be fetched from your database for the logged-in user.
-const mockStudentProfile: StudentProfile = {
-  studentId: 'student1',
-  skills: ['React', 'TypeScript', 'Node.js', 'Firebase', 'Data Analysis'],
-  interests: ['Web Development', 'Artificial Intelligence', 'Startups'],
-  pastExperiences: 'Developed a full-stack web application for a university project using the MERN stack. Contributed to an open-source library for data visualization.',
-  academicAchievements: 'Dean\'s List for two consecutive semesters. Published a paper on efficient sorting algorithms in the university journal. GPA: 3.8/4.0',
-};
+import type { Internship, User } from '@/lib/types';
+import { useAuth } from '@/contexts/auth-context';
 
 
 export default function RecommendationsPage() {
+  const { user } = useAuth();
   const [recommendations, setRecommendations] = useState<RecommendationOutput>([]);
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
 
+  const studentProfile: StudentProfile | null = useMemo(() => {
+    if (!user) return null;
+
+    // This is a placeholder for a more complex resume parsing logic.
+    // For now, we'll construct the description from existing profile fields.
+    const pastExperiences = `College: ${user.college || 'N/A'}\nBranch: ${user.branch || 'N/A'}\nSemester: ${user.semester || 'N/A'}`;
+    const academicAchievements = `GPA: ${user.gpa || 'N/A'}`;
+
+    return {
+      studentId: user.id,
+      skills: user.skills?.map(s => s.name) || [],
+      interests: [], // This could be a new field in the user profile
+      pastExperiences,
+      academicAchievements,
+    };
+  }, [user]);
+
   const handleGetRecommendations = () => {
+    if (!studentProfile) {
+      toast({
+        variant: "destructive",
+        title: "Profile not loaded",
+        description: "Your profile is not available yet. Please wait a moment and try again.",
+      });
+      return;
+    }
+
     startTransition(async () => {
       try {
         const input: RecommendationInput = {
-          studentProfile: mockStudentProfile,
+          studentProfile: studentProfile,
           // Convert mockInternships to the schema expected by the AI flow
           internships: mockInternships.map(i => ({
             id: i.id,
@@ -73,7 +91,7 @@ export default function RecommendationsPage() {
             Get personalized internship suggestions based on your profile and skills.
           </p>
         </div>
-        <Button onClick={handleGetRecommendations} disabled={isPending}>
+        <Button onClick={handleGetRecommendations} disabled={isPending || !user}>
           {isPending ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

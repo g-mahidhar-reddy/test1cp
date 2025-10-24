@@ -3,20 +3,14 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // Allow users to read, write, and delete their own resumes
-    match /resumes/{userId}/{fileName} {
+    // Allow users to read, write, and delete their own files within their dedicated folder.
+    // This covers both resumes and certificates.
+    match /resumes/{userId}/{allPaths=**} {
       allow read, write, delete: if request.auth != null && request.auth.uid == userId;
     }
-    
-    // Allow users to read, write, and delete their own certificates
-    match /certificates/{userId}/{fileName} {
+
+    match /certificates/{userId}/{allPaths=**} {
       allow read, write, delete: if request.auth != null && request.auth.uid == userId;
-    }
-    
-    // Public read for any other files (e.g., company logos)
-    match /{allPaths=**} {
-      allow read;
     }
   }
 }

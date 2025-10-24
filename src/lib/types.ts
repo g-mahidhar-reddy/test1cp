@@ -14,10 +14,16 @@ export interface User {
   branch?: string;
   semester?: number;
   gpa?: number;
-  skills?: { name: string, level?: string, type?: string }[];
+  skills?: Skill[];
   certifications?: string[];
   linkedinUrl?: string;
   portfolioUrl?: string;
+}
+
+export interface Skill {
+    name: string;
+    level?: string;
+    type?: string;
 }
 
 export interface Internship {
@@ -73,4 +79,20 @@ export interface Certificate {
   uploadedAt: any; // Firestore ServerTimestamp
 }
 
+export interface Recommendation {
+    id: string;
+    userId: string;
+    type: 'internship' | 'skill' | 'mentor';
+    recommendationId: string; // ID of the internship, skill, or mentor
+    reason: string;
+    status: 'pending' | 'accepted' | 'ignored';
+}
+
+export interface Feedback {
+    id: string;
+    recommendationId: string;
+    userId: string;
+    rating?: number; // e.g., 1-5
+    comment?: string;
+}
     

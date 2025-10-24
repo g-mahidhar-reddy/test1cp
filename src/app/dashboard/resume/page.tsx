@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { Upload, FileText, Download } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { useFirebase } from '@/firebase';
+import { useFirebase } from '@/firebase/provider';
 import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
 
@@ -46,8 +46,10 @@ export default function ResumePage() {
   }, [user, storage]);
 
   useEffect(() => {
-    fetchExistingResume();
-  }, [fetchExistingResume]);
+    if (user) {
+      fetchExistingResume();
+    }
+  }, [user, fetchExistingResume]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {

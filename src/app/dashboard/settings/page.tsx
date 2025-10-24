@@ -123,51 +123,79 @@ function AccountTab() {
     }
   };
 
-  const handleCertificateUpload = () => {
+ const handleCertificateUpload = () => {
     if (!selectedCertFile || !user || !firestore) return;
-  
+
     setIsUploadingCert(true);
-    const newCertDocRef = doc(collection(firestore, 'certificates'));
-    const certificateId = newCertDocRef.id;
+    const certificateId = doc(collection(firestore, 'certificates')).id; // Generate ID upfront
     const storageRef = ref(storage, `certificates/${user.id}/${certificateId}-${selectedCertFile.name}`);
-    const newCertificateData: Omit<CertificateType, 'id'> = {
+
+    // --- Optimistic UI Update ---
+    const tempUrl = URL.createObjectURL(selectedCertFile);
+    const optimisticCert: CertificateType = {
+        id: certificateId,
         userId: user.id,
         certificateName: selectedCertFile.name,
-        fileUrl: '', // Will be set after upload
-        uploadedAt: serverTimestamp(),
-      };
-    
-    // Optimistic UI update
-    setCertificates(prevCerts => [...prevCerts, { ...newCertificateData, id: certificateId, uploadedAt: new Date(), fileUrl: '#' } as CertificateType]);
+        fileUrl: tempUrl,
+        uploadedAt: new Date(),
+    };
+    setCertificates(prevCerts => [...prevCerts, optimisticCert]);
     setSelectedCertFile(null);
     setIsUploadingCert(false);
+    toast({ title: "Uploading...", description: "Your certificate is being uploaded in the background." });
 
-    // Start upload in the background
+    // --- Background Processing ---
     uploadBytes(storageRef, selectedCertFile)
       .then(snapshot => getDownloadURL(snapshot.ref))
       .then(downloadURL => {
-        newCertificateData.fileUrl = downloadURL;
-        return setDoc(newCertDocRef, newCertificateData);
-      })
-      .then(() => {
-        // Update optimistic entry with real URL
-        setCertificates(prevCerts => prevCerts.map(cert => 
-            cert.id === certificateId ? { ...cert, fileUrl: newCertificateData.fileUrl } : cert
-        ));
-        toast({
-          title: "Success!",
-          description: "Your certificate has been uploaded.",
-        });
+        const newCertificateData = {
+          userId: user.id,
+          certificateName: selectedCertFile.name,
+          fileUrl: downloadURL,
+          uploadedAt: serverTimestamp(),
+        };
+
+        const certDocRef = doc(firestore, 'certificates', certificateId);
+        
+        // This is a non-blocking write to Firestore
+        setDoc(certDocRef, newCertificateData)
+            .then(() => {
+                toast({
+                    title: "Success!",
+                    description: "Your certificate has been securely saved.",
+                });
+                // Update the optimistic entry with the real URL
+                 setCertificates(prevCerts => prevCerts.map(cert => 
+                    cert.id === certificateId ? { ...cert, fileUrl: downloadURL, isOptimistic: false } : cert
+                ));
+            })
+            .catch(error => {
+                // Handle Firestore write error
+                 toast({
+                    variant: "destructive",
+                    title: "Database Error",
+                    description: "Could not save certificate details to database.",
+                });
+                setCertificates(prevCerts => prevCerts.filter(cert => cert.id !== certificateId));
+                 const permissionError = new FirestorePermissionError({
+                    path: certDocRef.path,
+                    operation: 'create',
+                    requestResourceData: newCertificateData,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
       })
       .catch((error) => {
-        // Revert optimistic update on failure
+        // Handle storage upload error
+        toast({
+            variant: "destructive",
+            title: "Upload Failed",
+            description: "Could not upload the certificate file.",
+        });
         setCertificates(prevCerts => prevCerts.filter(cert => cert.id !== certificateId));
-        
-        const isStorageError = error.code && error.code.startsWith('storage/');
-        const permissionError = new FirestorePermissionError({
-          path: isStorageError ? storageRef.fullPath : newCertDocRef.path,
+         const permissionError = new FirestorePermissionError({
+          path: storageRef.fullPath,
           operation: 'create',
-          requestResourceData: isStorageError ? undefined : newCertificateData,
         });
         errorEmitter.emit('permission-error', permissionError);
       });

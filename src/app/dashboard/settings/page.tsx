@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useFirebase, useFirestore as useFirebaseFirestore } from '@/firebase/provider';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
@@ -99,15 +99,16 @@ function AccountTab() {
   const handleSaveProfile = async () => {
     if (!user || !firestore) return;
     const userDocRef = doc(firestore, 'users', user.id);
+    const dataToSave = { ...profileData };
     try {
-      await setDoc(userDocRef, profileData, { merge: true });
-      setUser(prev => prev ? ({ ...prev, ...profileData }) : null);
+      await setDoc(userDocRef, dataToSave, { merge: true });
+      setUser(prev => prev ? ({ ...prev, ...dataToSave }) : null);
       toast({ title: "Success", description: "Your profile has been updated." });
     } catch (error) {
        const permissionError = new FirestorePermissionError({
         path: userDocRef.path,
         operation: 'update',
-        requestResourceData: profileData,
+        requestResourceData: dataToSave,
       });
       errorEmitter.emit('permission-error', permissionError);
     }
@@ -126,18 +127,20 @@ function AccountTab() {
     const newCertDocRef = doc(collection(firestore, 'certificates'));
     const certificateId = newCertDocRef.id;
     const storageRef = ref(storage, `certificates/${user.id}/${certificateId}-${selectedCertFile.name}`);
-  
-    try {
-      const snapshot = await uploadBytes(storageRef, selectedCertFile);
-      const downloadURL = await getDownloadURL(snapshot.ref);
-  
-      const newCertificateData: Omit<CertificateType, 'id'> = {
+    const newCertificateData: Omit<CertificateType, 'id'> = {
         userId: user.id,
         certificateName: selectedCertFile.name,
-        fileUrl: downloadURL,
+        fileUrl: '', // Will be set after upload
         uploadedAt: serverTimestamp(),
       };
   
+    try {
+      // 1. Upload file to Storage
+      const snapshot = await uploadBytes(storageRef, selectedCertFile);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      newCertificateData.fileUrl = downloadURL;
+
+      // 2. Save metadata to Firestore
       await setDoc(newCertDocRef, newCertificateData);
   
       setCertificates(prevCerts => [...prevCerts, { ...newCertificateData, id: certificateId, uploadedAt: new Date() } as CertificateType]);
@@ -150,26 +153,20 @@ function AccountTab() {
     } catch (error: any) {
       console.error('Certificate upload failed:', error);
   
-      if (error.code === 'storage/unauthorized' || error.code === 'storage/retry-limit-exceeded') {
-        const permissionError = new FirestorePermissionError({
+      if (error.code && error.code.startsWith('storage')) {
+         const permissionError = new FirestorePermissionError({
           path: storageRef.fullPath,
           operation: 'write',
           requestResourceData: { name: selectedCertFile.name, size: selectedCertFile.size, contentType: selectedCertFile.type },
         });
         errorEmitter.emit('permission-error', permissionError);
-      } else if (error.code && (error.code.includes('permission-denied') || error.code.includes('unauthenticated'))) {
+      } else { // Assume Firestore error
          const permissionError = new FirestorePermissionError({
           path: newCertDocRef.path,
           operation: 'create',
-          requestResourceData: { userId: user.id, certificateName: selectedCertFile.name }
+          requestResourceData: newCertificateData
         });
         errorEmitter.emit('permission-error', permissionError);
-      } else {
-        toast({
-            variant: "destructive",
-            title: "Upload failed",
-            description: error.message || "Could not upload certificate. Please try again.",
-        });
       }
     } finally {
       setIsUploadingCert(false);
@@ -198,19 +195,18 @@ function AccountTab() {
     const userDocRef = doc(firestore, 'users', user.id);
     const dataToSave = { skills: userSkills };
       
-    setDoc(userDocRef, dataToSave, { merge: true })
-        .then(() => {
-            setUser(prev => prev ? ({ ...prev, skills: userSkills }) : null);
-            toast({ title: "Success", description: "Your skills have been updated." });
-        })
-        .catch((error) => {
-            const permissionError = new FirestorePermissionError({
-                path: userDocRef.path,
-                operation: 'update',
-                requestResourceData: dataToSave,
-            });
-            errorEmitter.emit('permission-error', permissionError);
+    try {
+        await setDoc(userDocRef, dataToSave, { merge: true });
+        setUser(prev => prev ? ({ ...prev, skills: userSkills }) : null);
+        toast({ title: "Success", description: "Your skills have been updated." });
+    } catch (error) {
+        const permissionError = new FirestorePermissionError({
+            path: userDocRef.path,
+            operation: 'update',
+            requestResourceData: dataToSave,
         });
+        errorEmitter.emit('permission-error', permissionError);
+    }
   };
 
   const handleDeleteCertificate = async (certificate: CertificateType) => {
@@ -220,7 +216,9 @@ function AccountTab() {
     const fileRef = ref(storage, certificate.fileUrl);
 
     try {
+        // Attempt to delete the Firestore document first
         await deleteDoc(certDocRef);
+        // Then delete the file from Storage
         await deleteObject(fileRef);
 
         setCertificates(certificates.filter(c => c.id !== certificate.id));
@@ -233,26 +231,23 @@ function AccountTab() {
     } catch (error: any) {
         console.error("Error deleting certificate:", error);
         
-        let operation: 'delete' = 'delete';
-        let path: string = '';
-        let requestResourceData: any = undefined;
+        let permissionError;
 
         if (error.code && error.code.startsWith('storage')) {
-          path = certificate.fileUrl; // or a reconstructed path if needed
-          operation = 'delete';
+          // This indicates the storage deletion failed.
+          permissionError = new FirestorePermissionError({
+            path: fileRef.fullPath,
+            operation: 'delete',
+          });
         } else {
-          path = `certificates/${certificate.id}`;
-          operation = 'delete';
+          // Assume the Firestore deletion failed.
+          permissionError = new FirestorePermissionError({
+            path: certDocRef.path,
+            operation: 'delete',
+          });
         }
-
-        const permissionError = new FirestorePermissionError({ path, operation, requestResourceData });
-        errorEmitter.emit('permission-error', permissionError);
         
-        toast({
-            variant: "destructive",
-            title: "Deletion failed",
-            description: "Could not delete the certificate. Please check permissions and try again.",
-        });
+        errorEmitter.emit('permission-error', permissionError);
     }
   };
 
@@ -274,7 +269,7 @@ function AccountTab() {
                     <div className="flex items-center gap-6">
                         <Avatar className="h-20 w-20">
                             <AvatarImage src={profileData.avatarUrl || user.avatarUrl} alt={profileData.name || user.name} />
-                            <AvatarFallback>{(profileData.name || user.name).substring(0, 2).toUpperCase()}</AvatarFallback>
+                            <AvatarFallback>{(profileData.name || user.name || 'U').substring(0, 2).toUpperCase()}</AvatarFallback>
                         </Avatar>
                         <div className="grid gap-2">
                              <Label htmlFor="profile-picture">Profile Picture</Label>
@@ -345,8 +340,7 @@ function AccountTab() {
                     )}
                 </form>
             </CardContent>
-             <CardFooter className="border-t px-6 py-4 flex justify-between items-center">
-                <p className="text-xs text-muted-foreground">Your profile is saved automatically.</p>
+             <CardFooter className="border-t px-6 py-4 flex justify-end items-center">
                 <Button onClick={handleSaveProfile}>Save Changes</Button>
             </CardFooter>
         </Card>
@@ -710,3 +704,5 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+    

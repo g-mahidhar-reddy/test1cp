@@ -10,8 +10,9 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
+  User as FirebaseUser
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, Firestore } from 'firebase/firestore';
 
 
 interface AuthContextType {
@@ -25,6 +26,32 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const fetchAndSetUser = async (firebaseUser: FirebaseUser, firestore: Firestore, setUser: Dispatch<SetStateAction<User | null>>) => {
+  const userDocRef = doc(firestore, 'users', firebaseUser.uid);
+  const docSnap = await getDoc(userDocRef);
+
+  if (docSnap.exists()) {
+    setUser({ id: docSnap.id, ...docSnap.data() } as User);
+    return { id: docSnap.id, ...docSnap.data() } as User;
+  } else {
+    // This case might happen if Firestore profile creation fails after auth creation.
+    // We can try to recover by creating a profile now.
+    const mockUser = mockUsers.find(u => u.email === firebaseUser.email) || mockUsers[0];
+    const newUserProfile: User = {
+      id: firebaseUser.uid,
+      email: firebaseUser.email!,
+      name: firebaseUser.displayName || mockUser.name || "New User",
+      role: mockUser.role || 'student',
+      avatarUrl: mockUser.avatarUrl,
+      skills: [],
+    };
+    await setDoc(userDocRef, newUserProfile);
+    setUser(newUserProfile);
+    return newUserProfile;
+  }
+};
+
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const router = useRouter();
@@ -34,33 +61,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
 
   useEffect(() => {
-    const fetchUserProfile = async () => {
-      if (!isUserLoading && firebaseUser && firestore) {
-        const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-        const docSnap = await getDoc(userDocRef);
-
-        if (docSnap.exists()) {
-          setUser({ id: docSnap.id, ...docSnap.data() } as User);
-        } else {
-          // If profile doesn't exist, create a basic one.
-          const mockUser = mockUsers.find(u => u.email === firebaseUser.email) || mockUsers[0];
-          const newUserProfile: User = {
-            id: firebaseUser.uid,
-            email: firebaseUser.email!,
-            name: firebaseUser.displayName || mockUser.name || "New User",
-            role: mockUser.role || 'student',
-            avatarUrl: mockUser.avatarUrl,
-          };
-          await setDoc(userDocRef, newUserProfile);
-          setUser(newUserProfile);
-        }
-      } else if (!isUserLoading && !firebaseUser) {
+    // This effect handles the initial user load or auth state changes from Firebase
+    if (!isUserLoading && firebaseUser && firestore && !user) {
+        fetchAndSetUser(firebaseUser, firestore, setUser);
+    } else if (!isUserLoading && !firebaseUser) {
         setUser(null);
-      }
-    };
-
-    fetchUserProfile();
-  }, [firebaseUser, isUserLoading, firestore]);
+    }
+  }, [firebaseUser, isUserLoading, firestore, user]);
 
 
   useEffect(() => {
@@ -77,16 +84,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, isUserLoading, pathname, router]);
 
   const login = async (role: UserRole, email = 'student@example.com', password = 'password') => {
-    if (!auth) return;
+    if (!auth || !firestore) return;
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      // User profile will be fetched by the useEffect hook
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      await fetchAndSetUser(userCredential.user, firestore, setUser);
       router.push('/dashboard');
     } catch (error: any) {
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
-        // If user doesn't exist, create them
+        // If user doesn't exist, sign them up and then log in.
         try {
-          await signup(role, email, password, "New User");
+          await signup(role, email, password, "New User", true);
         } catch (signupError) {
           console.error("Failed to sign up after failed login:", signupError);
         }
@@ -96,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signup = async (role: UserRole, email: string, password: string, name: string) => {
+  const signup = async (role: UserRole, email: string, password: string, name: string, redirect: boolean = true) => {
     if (!auth || !firestore) return;
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -114,9 +121,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await setDoc(userDocRef, newUserProfile);
       
       setUser(newUserProfile);
-      router.push('/dashboard');
+      if (redirect) {
+        router.push('/dashboard');
+      }
     } catch (error) {
       console.error("Failed to sign up:", error);
+      throw error; // Re-throw to be caught by login function if needed
     }
   };
 

@@ -11,8 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Upload, FileText, Download, Loader2 } from 'lucide-react';
-import React, { useState, useEffect, useCallback } from 'react';
+import { Upload, FileText, Download, Loader2, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useTransition } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useFirebase, useFirestore } from '@/firebase/provider';
 import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
@@ -28,6 +28,7 @@ export default function ResumePage() {
   const firestore = useFirestore();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isAnalyzing, startAnalyzing] = useTransition();
   const [existingResume, setExistingResume] = useState<{ name: string; url: string } | null>(null);
   const { toast } = useToast();
   const storage = getStorage(firebaseApp);
@@ -79,6 +80,62 @@ export default function ResumePage() {
       reader.readAsDataURL(file);
     });
   };
+  
+  const analyzeAndupdateSkills = (file: File) => {
+     startAnalyzing(async () => {
+       if(!user || !firestore) return;
+
+       try {
+        const dataUri = await fileToDataUri(file);
+        const parsedData = await parseResume({ resumeDataUri: dataUri });
+
+        if (parsedData && parsedData.skills.length > 0) {
+          const userDocRef = doc(firestore, 'users', user.id);
+          const newSkills = parsedData.skills.map(skill => ({ name: skill }));
+          
+          // Merge with existing skills, avoiding duplicates
+          const existingSkills = user.skills || [];
+          const combinedSkills = [...existingSkills];
+          newSkills.forEach(newSkill => {
+              if (!existingSkills.some(existingSkill => existingSkill.name.toLowerCase() === newSkill.name.toLowerCase())) {
+                  combinedSkills.push(newSkill);
+              }
+          });
+          
+          const dataToSave = { skills: combinedSkills };
+          setDoc(userDocRef, dataToSave, { merge: true })
+            .then(() => {
+                setUser(prev => prev ? { ...prev, skills: combinedSkills } : null);
+                toast({
+                  title: "Skills Updated!",
+                  description: `We've added ${parsedData.skills.length} skills from your resume to your profile.`,
+                });
+            })
+            .catch((error) => {
+                const permissionError = new FirestorePermissionError({
+                  path: userDocRef.path,
+                  operation: 'update',
+                  requestResourceData: dataToSave,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+
+        } else {
+          toast({
+            title: "Analysis Complete",
+            description: "We couldn't extract any new skills from your resume.",
+          });
+        }
+       } catch (error) {
+         console.error('Analysis failed:', error);
+         toast({
+          variant: "destructive",
+          title: "Analysis failed",
+          description: "There was a problem analyzing your resume. Please try again.",
+        });
+       }
+    });
+  }
 
   const handleUpload = async () => {
     if (!selectedFile || !user || !firestore) return;
@@ -99,53 +156,13 @@ export default function ResumePage() {
       
       toast({
         title: "Resume Uploaded!",
-        description: "Now analyzing your resume to extract skills...",
+        description: "Now analyzing your resume to extract skills in the background...",
       });
+      
+      // Start analysis in the background
+      analyzeAndupdateSkills(selectedFile);
 
       await fetchExistingResume(); // Refresh the existing resume view
-      
-      // Parse resume and update skills
-      const dataUri = await fileToDataUri(selectedFile);
-      const parsedData = await parseResume({ resumeDataUri: dataUri });
-
-      if (parsedData && parsedData.skills.length > 0) {
-        const userDocRef = doc(firestore, 'users', user.id);
-        const newSkills = parsedData.skills.map(skill => ({ name: skill }));
-        
-        // Merge with existing skills, avoiding duplicates
-        const existingSkills = user.skills || [];
-        const combinedSkills = [...existingSkills];
-        newSkills.forEach(newSkill => {
-            if (!existingSkills.some(existingSkill => existingSkill.name.toLowerCase() === newSkill.name.toLowerCase())) {
-                combinedSkills.push(newSkill);
-            }
-        });
-        
-        const dataToSave = { skills: combinedSkills };
-        setDoc(userDocRef, dataToSave, { merge: true })
-          .then(() => {
-              setUser(prev => prev ? { ...prev, skills: combinedSkills } : null);
-              toast({
-                title: "Skills Updated!",
-                description: `We've added ${parsedData.skills.length} skills from your resume to your profile.`,
-              });
-          })
-          .catch((error) => {
-              const permissionError = new FirestorePermissionError({
-                path: userDocRef.path,
-                operation: 'update',
-                requestResourceData: dataToSave,
-              });
-              errorEmitter.emit('permission-error', permissionError);
-          });
-
-      } else {
-         toast({
-          title: "Analysis Complete",
-          description: "We couldn't extract any new skills from your resume.",
-        });
-      }
-
       setSelectedFile(null); // Clear the file input
 
     } catch (error) {
@@ -175,16 +192,31 @@ export default function ResumePage() {
                   <FileText className="h-6 w-6 text-muted-foreground" />
                   <p className="font-medium truncate">{existingResume.name}</p>
                 </div>
-                <Button variant="outline" size="icon" asChild>
-                  <a href={existingResume.url} target="_blank" rel="noopener noreferrer">
-                    <Download className="h-4 w-4" />
-                    <span className="sr-only">Download Resume</span>
-                  </a>
-                </Button>
+                <div className="flex items-center gap-2">
+                    {isAnalyzing && (
+                        <div className="flex items-center text-sm text-muted-foreground">
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
+                            <span>Analyzing...</span>
+                        </div>
+                    )}
+                    <Button variant="outline" size="icon" asChild>
+                    <a href={existingResume.url} target="_blank" rel="noopener noreferrer">
+                        <Download className="h-4 w-4" />
+                        <span className="sr-only">Download Resume</span>
+                    </a>
+                    </Button>
+                </div>
               </div>
             ) : (
               <div className="flex items-center justify-center rounded-lg border-2 border-dashed bg-muted/20 p-8">
-                <p className="text-sm text-muted-foreground">No resume uploaded yet.</p>
+                 {isAnalyzing ? (
+                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <span>Analyzing your new resume...</span>
+                     </div>
+                 ) : (
+                    <p className="text-sm text-muted-foreground">No resume uploaded yet.</p>
+                 )}
               </div>
             )}
           </CardContent>
@@ -206,9 +238,11 @@ export default function ResumePage() {
               <Label htmlFor="resume-upload">Resume (PDF only)</Label>
               <div className="flex w-full items-center space-x-2">
                 <Input id="resume-upload" type="file" accept=".pdf" onChange={handleFileChange} />
-                <Button onClick={handleUpload} disabled={!selectedFile || isUploading}>
+                <Button onClick={handleUpload} disabled={!selectedFile || isUploading || isAnalyzing}>
                   {isUploading ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Processing...</>
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Uploading...</>
+                  ) : isAnalyzing ? (
+                     <><Sparkles className="mr-2 h-4 w-4 animate-pulse"/> Analyzing...</>
                   ) : (
                     <>
                       <Upload className="mr-2 h-4 w-4" />

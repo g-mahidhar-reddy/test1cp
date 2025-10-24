@@ -35,14 +35,6 @@ export function initializeFirebase() {
 export function getSdks(firebaseApp: FirebaseApp) {
   const firestore = getFirestore(firebaseApp);
   const auth = getAuth(firebaseApp);
-  if(process.env.NODE_ENV === 'development') {
-    try {
-      connectFirestoreEmulator(firestore, '127.0.0.1', 8080);
-      connectAuthEmulator(auth, 'http://127.0.0.1:9099');
-    } catch(e) {
-      console.error('Failed to connect to Firebase emulators. This is expected if you are not running the emulators, or are running in a deployed environment.', e);
-    }
-  }
   return {
     firebaseApp,
     auth,

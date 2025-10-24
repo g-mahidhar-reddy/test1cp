@@ -28,7 +28,11 @@ import { useFirebase } from "@/firebase/provider";
 import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import type { Certificate as CertificateType, Skill } from "@/lib/types";
+import type { Certificate as CertificateType } from "@/lib/types";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
+import { Skill } from '@/lib/types';
+
 
 const predefinedSkills = {
   "Programming & Tech": ["Python", "Java", "JavaScript", "HTML", "CSS", "React", "Node.js", "Firebase", "SQL", "C++", "Machine Learning", "Data Science", "Cloud Computing", "Cybersecurity", "API Development"],
@@ -106,42 +110,53 @@ function AccountTab() {
   const handleSaveSkills = async () => {
       if (!user) return;
       const userDocRef = doc(firestore, 'users', user.id);
-      try {
-          await setDoc(userDocRef, { skills: userSkills }, { merge: true });
-          toast({ title: "Success", description: "Your skills have been updated." });
-      } catch (error) {
-          console.error("Error saving skills:", error);
-          toast({ variant: "destructive", title: "Error", description: "Could not save your skills." });
-      }
+      const dataToSave = { skills: userSkills };
+      
+      setDoc(userDocRef, dataToSave, { merge: true })
+          .then(() => {
+              toast({ title: "Success", description: "Your skills have been updated." });
+          })
+          .catch((error) => {
+              const permissionError = new FirestorePermissionError({
+                  path: userDocRef.path,
+                  operation: 'update',
+                  requestResourceData: dataToSave,
+              });
+              errorEmitter.emit('permission-error', permissionError);
+          });
   };
 
   const handleDeleteCertificate = async (certificate: CertificateType) => {
     if (!user) return;
 
-    try {
-      // 1. Delete the file from Firebase Storage
-      const fileRef = ref(storage, certificate.fileUrl);
-      await deleteObject(fileRef);
+    // 1. Delete the file from Firebase Storage
+    const fileRef = ref(storage, certificate.fileUrl);
+    await deleteObject(fileRef).catch(error => {
+      // Even if storage deletion fails, we try to update Firestore
+      console.error("Error deleting from storage, proceeding to Firestore:", error);
+    });
 
-      // 2. Remove the certificate metadata from Firestore
-      const updatedCertificates = certificates.filter(c => c.id !== certificate.id);
-      const certsDocRef = doc(firestore, 'users', user.id, 'data', 'certificates');
-      await setDoc(certsDocRef, { items: updatedCertificates });
-      
-      setCertificates(updatedCertificates);
-
-      toast({
-        title: "Certificate Deleted",
-        description: `${certificate.certificateName} has been removed.`,
+    // 2. Remove the certificate metadata from Firestore
+    const updatedCertificates = certificates.filter(c => c.id !== certificate.id);
+    const certsDocRef = doc(firestore, 'users', user.id, 'data', 'certificates');
+    const dataToSave = { items: updatedCertificates };
+    
+    setDoc(certsDocRef, dataToSave)
+      .then(() => {
+        setCertificates(updatedCertificates);
+        toast({
+          title: "Certificate Deleted",
+          description: `${certificate.certificateName} has been removed.`,
+        });
+      })
+      .catch((error) => {
+          const permissionError = new FirestorePermissionError({
+              path: certsDocRef.path,
+              operation: 'update',
+              requestResourceData: dataToSave,
+          });
+          errorEmitter.emit('permission-error', permissionError);
       });
-    } catch (error) {
-      console.error("Error deleting certificate:", error);
-      toast({
-        variant: "destructive",
-        title: "Deletion Failed",
-        description: "There was a problem deleting your certificate.",
-      });
-    }
   };
 
   return (
@@ -591,3 +606,5 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+    

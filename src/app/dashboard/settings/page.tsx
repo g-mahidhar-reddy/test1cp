@@ -1,3 +1,4 @@
+
 import {
   Card,
   CardContent,
@@ -9,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { User, Settings, Bell, Shield, HelpCircle } from "lucide-react";
 
 // This would come from useAuth() and be editable
 const user = {
@@ -27,12 +30,11 @@ const user = {
   portfolioUrl: "https://github.com/aaravsharma",
 };
 
-
-export default function ProfilePage() {
+function AccountTab() {
   return (
-    <Card>
+     <Card>
       <CardHeader>
-        <CardTitle>My Profile</CardTitle>
+        <CardTitle>Account</CardTitle>
         <CardDescription>Manage your account settings and personal information.</CardDescription>
       </CardHeader>
       <CardContent>
@@ -114,5 +116,73 @@ export default function ProfilePage() {
         </form>
       </CardContent>
     </Card>
+  )
+}
+
+
+export default function SettingsPage() {
+  return (
+    <div className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+      <div className="mb-4">
+          <h1 className="font-semibold text-2xl md:text-3xl">Settings</h1>
+          <p className="text-muted-foreground">Manage your account, preferences, and notifications.</p>
+      </div>
+      <Tabs defaultValue="account">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
+          <TabsTrigger value="account"><User className="mr-2 h-4 w-4" />Account</TabsTrigger>
+          <TabsTrigger value="preferences"><Settings className="mr-2 h-4 w-4" />Preferences</TabsTrigger>
+          <TabsTrigger value="notifications"><Bell className="mr-2 h-4 w-4" />Notifications</TabsTrigger>
+          <TabsTrigger value="security"><Shield className="mr-2 h-4 w-4" />Security</TabsTrigger>
+          <TabsTrigger value="help"><HelpCircle className="mr-2 h-4 w-4" />Help & Support</TabsTrigger>
+        </TabsList>
+        <TabsContent value="account" className="mt-6">
+          <AccountTab />
+        </TabsContent>
+        <TabsContent value="preferences" className="mt-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Preferences</CardTitle>
+                    <CardDescription>Customize the look and feel of the application.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-muted-foreground">Preferences settings will be available here soon.</p>
+                </CardContent>
+            </Card>
+        </TabsContent>
+        <TabsContent value="notifications" className="mt-6">
+             <Card>
+                <CardHeader>
+                    <CardTitle>Notifications</CardTitle>
+                    <CardDescription>Manage how you receive notifications.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-muted-foreground">Notification settings will be available here soon.</p>
+                </CardContent>
+            </Card>
+        </TabsContent>
+        <TabsContent value="security" className="mt-6">
+             <Card>
+                <CardHeader>
+                    <CardTitle>Security</CardTitle>
+                    <CardDescription>Manage your account security.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-muted-foreground">Security settings will be available here soon.</p>
+                </CardContent>
+            </Card>
+        </TabsContent>
+        <TabsContent value="help" className="mt-6">
+             <Card>
+                <CardHeader>
+                    <CardTitle>Help & Support</CardTitle>
+                    <CardDescription>Get help or contact our support team.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-muted-foreground">Support options will be available here soon.</p>
+                </CardContent>
+            </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

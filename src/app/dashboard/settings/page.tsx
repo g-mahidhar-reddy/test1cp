@@ -23,12 +23,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import React, { useState } from 'react';
-
-const userCertificates = [
-    { id: 'cert1', name: 'AI Internship Certificate.pdf', url: '#', uploadedAt: '2024-07-20' },
-    { id: 'cert2', name: 'Advanced React Course.png', url: '#', uploadedAt: '2024-06-15' }
-];
+import React, { useState, useEffect, useCallback } from 'react';
+import { useFirebase } from "@/firebase/provider";
+import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from "firebase/storage";
+import { useToast } from "@/hooks/use-toast";
+import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import type { Certificate as CertificateType, Skill } from "@/lib/types";
 
 const predefinedSkills = {
   "Programming & Tech": ["Python", "Java", "JavaScript", "HTML", "CSS", "React", "Node.js", "Firebase", "SQL", "C++", "Machine Learning", "Data Science", "Cloud Computing", "Cybersecurity", "API Development"],
@@ -40,22 +40,109 @@ const predefinedSkills = {
 
 function AccountTab() {
   const { user } = useAuth();
-  const [userSkills, setUserSkills] = useState<string[]>(user?.skills || []);
-  
+  const { firestore } = useFirebase();
+  const { toast } = useToast();
+  const [userSkills, setUserSkills] = useState<Skill[]>([]);
+  const [customSkillInput, setCustomSkillInput] = useState('');
+
+  const [certificates, setCertificates] = useState<CertificateType[]>([]);
+  const { firebaseApp } = useFirebase();
+  const storage = getStorage(firebaseApp);
+
+  const fetchCertificates = useCallback(async () => {
+    if (!user) return;
+    const certsRef = doc(firestore, 'users', user.id, 'data', 'certificates');
+    try {
+      const docSnap = await getDoc(certsRef);
+      if (docSnap.exists()) {
+        setCertificates(docSnap.data().items || []);
+      }
+    } catch (error) {
+      console.error("Error fetching certificates:", error);
+    }
+  }, [user, firestore]);
+
+  const fetchSkills = useCallback(async () => {
+    if (!user) return;
+    const userDocRef = doc(firestore, 'users', user.id);
+    try {
+        const docSnap = await getDoc(userDocRef);
+        if (docSnap.exists() && docSnap.data().skills) {
+            setUserSkills(docSnap.data().skills);
+        }
+    } catch (error) {
+        console.error("Error fetching skills:", error);
+    }
+  }, [user, firestore]);
+
+  useEffect(() => {
+    if (user) {
+      fetchCertificates();
+      fetchSkills();
+    }
+  }, [user, fetchCertificates, fetchSkills]);
+
   if (!user) {
     return null;
   }
 
   const handleAddSkill = (skill: string) => {
-    if (skill && !userSkills.includes(skill)) {
-      setUserSkills([...userSkills, skill]);
+    if (skill && !userSkills.some(s => s.name === skill)) {
+      setUserSkills([...userSkills, { name: skill }]);
+    }
+  };
+
+  const handleAddCustomSkill = () => {
+    if (customSkillInput && !userSkills.some(s => s.name === customSkillInput)) {
+        setUserSkills([...userSkills, { name: customSkillInput }]);
+        setCustomSkillInput('');
     }
   };
 
   const handleRemoveSkill = (skillToRemove: string) => {
-    setUserSkills(userSkills.filter(skill => skill !== skillToRemove));
+    setUserSkills(userSkills.filter(skill => skill.name !== skillToRemove));
+  };
+  
+  const handleSaveSkills = async () => {
+      if (!user) return;
+      const userDocRef = doc(firestore, 'users', user.id);
+      try {
+          await setDoc(userDocRef, { skills: userSkills }, { merge: true });
+          toast({ title: "Success", description: "Your skills have been updated." });
+      } catch (error) {
+          console.error("Error saving skills:", error);
+          toast({ variant: "destructive", title: "Error", description: "Could not save your skills." });
+      }
   };
 
+  const handleDeleteCertificate = async (certificate: CertificateType) => {
+    if (!user) return;
+
+    try {
+      // 1. Delete the file from Firebase Storage
+      const fileRef = ref(storage, certificate.fileUrl);
+      await deleteObject(fileRef);
+
+      // 2. Remove the certificate metadata from Firestore
+      const updatedCertificates = certificates.filter(c => c.id !== certificate.id);
+      const certsDocRef = doc(firestore, 'users', user.id, 'data', 'certificates');
+      await setDoc(certsDocRef, { items: updatedCertificates });
+      
+      setCertificates(updatedCertificates);
+
+      toast({
+        title: "Certificate Deleted",
+        description: `${certificate.certificateName} has been removed.`,
+      });
+    } catch (error) {
+      console.error("Error deleting certificate:", error);
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: "There was a problem deleting your certificate.",
+      });
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -163,25 +250,41 @@ function AccountTab() {
                 </div>
                 <div className="space-y-4">
                     <h4 className="font-medium text-sm">Uploaded Certificates</h4>
-                    {userCertificates.length > 0 ? (
+                    {certificates.length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {userCertificates.map(cert => (
+                            {certificates.map(cert => (
                                 <div key={cert.id} className="flex items-center justify-between rounded-lg border bg-muted/50 p-3">
                                     <div className="flex items-center gap-3">
                                         <FileText className="h-6 w-6 text-muted-foreground" />
-                                        <p className="font-medium truncate text-sm">{cert.name}</p>
+                                        <p className="font-medium truncate text-sm">{cert.certificateName}</p>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Button variant="ghost" size="icon" asChild>
-                                            <a href={cert.url} target="_blank" rel="noopener noreferrer">
+                                            <a href={cert.fileUrl} target="_blank" rel="noopener noreferrer">
                                                 <Download className="h-4 w-4" />
                                                 <span className="sr-only">Download</span>
                                             </a>
                                         </Button>
-                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                                            <Trash2 className="h-4 w-4" />
-                                            <span className="sr-only">Delete</span>
-                                        </Button>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                                    <Trash2 className="h-4 w-4" />
+                                                    <span className="sr-only">Delete</span>
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    This action cannot be undone. This will permanently delete your certificate.
+                                                </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                <AlertDialogAction onClick={() => handleDeleteCertificate(cert)}>Delete</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
                                     </div>
                                 </div>
                             ))}
@@ -206,11 +309,11 @@ function AccountTab() {
                     <h4 className="font-medium text-sm mb-2">Your Skills</h4>
                      <div className="flex flex-wrap gap-2">
                         {userSkills.length > 0 ? userSkills.map(skill => (
-                             <Badge key={skill} variant="secondary" className="flex items-center gap-1.5 pr-1 text-base">
-                                {skill}
-                                <button onClick={() => handleRemoveSkill(skill)} className="rounded-full hover:bg-background/50 p-0.5">
+                             <Badge key={skill.name} variant="secondary" className="flex items-center gap-1.5 pr-1 text-base">
+                                {skill.name}
+                                <button onClick={() => handleRemoveSkill(skill.name)} className="rounded-full hover:bg-background/50 p-0.5">
                                     <X className="h-3 w-3" />
-                                    <span className="sr-only">Remove {skill}</span>
+                                    <span className="sr-only">Remove {skill.name}</span>
                                 </button>
                             </Badge>
                         )) : <p className="text-sm text-muted-foreground">Add skills from the suggestions below or add your own.</p>}
@@ -222,7 +325,7 @@ function AccountTab() {
                         <div key={category}>
                             <h5 className="font-semibold text-xs text-muted-foreground mb-2">{category}</h5>
                             <div className="flex flex-wrap gap-2">
-                                {skills.map(skill => !userSkills.includes(skill) && (
+                                {skills.map(skill => !userSkills.some(s => s.name === skill) && (
                                     <Button key={skill} variant="outline" size="sm" onClick={() => handleAddSkill(skill)}>
                                         <PlusCircle className="mr-2 h-4 w-4" />
                                         {skill}
@@ -232,8 +335,13 @@ function AccountTab() {
                         </div>
                     ))}
                     <div className="flex items-center gap-2">
-                      <Input placeholder="Add a custom skill..."/>
-                      <Button variant="outline" size="sm">
+                      <Input 
+                        placeholder="Add a custom skill..."
+                        value={customSkillInput}
+                        onChange={(e) => setCustomSkillInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddCustomSkill()}
+                      />
+                      <Button variant="outline" size="sm" onClick={handleAddCustomSkill}>
                           <PlusCircle className="mr-2 h-4 w-4" />
                           Add Custom Skill
                       </Button>
@@ -241,7 +349,7 @@ function AccountTab() {
                 </div>
             </CardContent>
              <CardFooter className="border-t px-6 py-4 flex justify-end">
-                <Button>Save Skills</Button>
+                <Button onClick={handleSaveSkills}>Save Skills</Button>
             </CardFooter>
         </Card>
     </div>
@@ -483,5 +591,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-
-    

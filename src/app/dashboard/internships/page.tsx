@@ -1,3 +1,6 @@
+
+'use client';
+import { useState, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -15,8 +18,41 @@ import { ListFilter, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { InternshipCard } from "@/components/internship-card";
 import { mockInternships } from "@/lib/data";
+import { useAuth } from '@/contexts/auth-context';
+import { useCollection } from '@/firebase/firestore/use-collection';
+import { collection, query } from 'firebase/firestore';
+import { useFirestore } from '@/firebase';
+import type { Application } from '@/lib/types';
+
 
 export default function InternshipsPage() {
+  const { user } = useAuth();
+  const firestore = useFirestore();
+
+  const applicationsQuery = useMemo(() => {
+    if (!user || !firestore) return null;
+    const q = query(collection(firestore, `users/${user.id}/applications`));
+    // @ts-ignore
+    q.__memo = true;
+    return q;
+  }, [user, firestore]);
+
+  const { data: applications } = useCollection<Application>(applicationsQuery);
+
+  const appliedInternshipIds = useMemo(() => {
+    return new Set(applications?.map(app => app.internshipId));
+  }, [applications]);
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  const filteredInternships = useMemo(() => {
+    return mockInternships.filter(internship => 
+      internship.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      internship.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      internship.requiredSkills.some(skill => skill.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  }, [searchTerm]);
+
   return (
     <div className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
       <Card>
@@ -28,6 +64,8 @@ export default function InternshipsPage() {
                 type="search"
                 placeholder="Search for internships, companies, skills..."
                 className="w-full rounded-lg bg-background pl-8"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             <DropdownMenu>
@@ -55,10 +93,15 @@ export default function InternshipsPage() {
         </CardContent>
       </Card>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {mockInternships.map((internship) => (
-          <InternshipCard key={internship.id} internship={internship} />
+        {filteredInternships.map((internship) => (
+          <InternshipCard 
+            key={internship.id} 
+            internship={internship}
+            hasApplied={appliedInternshipIds.has(internship.id)}
+          />
         ))}
       </div>
     </div>
   );
 }
+

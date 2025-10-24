@@ -1,3 +1,4 @@
+
 import {
   Card,
   CardContent,
@@ -9,10 +10,11 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import type { Internship } from "@/lib/types";
-import { MapPin, Clock, IndianRupee, Star } from "lucide-react";
+import { MapPin, Clock, IndianRupee, Star, CheckCircle } from "lucide-react";
 import { ApplyInternshipDialog } from "./apply-internship-dialog";
+import { Button } from "./ui/button";
 
-export function InternshipCard({ internship }: { internship: Internship }) {
+export function InternshipCard({ internship, hasApplied }: { internship: Internship, hasApplied?: boolean }) {
   return (
     <Card className="flex h-full flex-col overflow-hidden transition-shadow hover:shadow-lg">
       <CardHeader className="flex flex-row items-start gap-4 space-y-0 bg-muted/20 p-4">
@@ -61,8 +63,16 @@ export function InternshipCard({ internship }: { internship: Internship }) {
         </div>
       </CardContent>
       <CardFooter className="border-t p-4">
-        <ApplyInternshipDialog internship={internship} />
+        {hasApplied ? (
+            <Button disabled className="w-full">
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Applied
+            </Button>
+        ) : (
+            <ApplyInternshipDialog internship={internship} />
+        )}
       </CardFooter>
     </Card>
   );
 }
+

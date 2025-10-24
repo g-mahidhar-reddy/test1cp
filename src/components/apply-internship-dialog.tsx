@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Internship, ApplicationStatus } from '@/lib/types';
-import { MapPin, Clock, IndianRupee, Star, Briefcase, Building, Info, Book, CheckCircle } from 'lucide-react';
+import { MapPin, Clock, IndianRupee, Star, Briefcase, Building, Info, Book, CheckCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { useFirestore } from '@/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -50,6 +50,7 @@ export function ApplyInternshipDialog({ internship }: { internship: Internship }
         internshipDetails: { // Denormalizing data for easier access
             title: internship.title,
             companyName: internship.companyName,
+            companyLogoUrl: internship.companyLogoUrl,
         },
          studentDetails: {
             id: user.id,
@@ -57,9 +58,10 @@ export function ApplyInternshipDialog({ internship }: { internship: Internship }
             email: user.email,
         }
     };
+    
+    const applicationsColRef = collection(firestore, `users/${user.id}/applications`);
 
     try {
-        const applicationsColRef = collection(firestore, `users/${user.id}/applications`);
         await addDoc(applicationsColRef, applicationData);
         
         toast({
@@ -68,10 +70,8 @@ export function ApplyInternshipDialog({ internship }: { internship: Internship }
         });
         setOpen(false); // Close the dialog on success
     } catch (error) {
-        console.error("Failed to submit application:", error);
-        
         const permissionError = new FirestorePermissionError({
-            path: `users/${user.id}/applications`,
+            path: applicationsColRef.path,
             operation: 'create',
             requestResourceData: applicationData,
         });
@@ -90,18 +90,19 @@ export function ApplyInternshipDialog({ internship }: { internship: Internship }
             View Details
           </Button>
         </DialogTrigger>
+        {/* We use a separate trigger for the main button to simplify the UI state */}
         <DialogTrigger asChild>
-          <Button className="w-full">Apply Now</Button>
+           <Button className="w-full">Apply Now</Button>
         </DialogTrigger>
       </div>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-2xl">{internship.title}</DialogTitle>
-          <DialogDescription className="flex items-center gap-2">
+          <DialogDescription className="flex items-center gap-2 pt-1">
             <Building className="h-4 w-4" />
             {internship.companyName}
              {internship.verified && (
-                <Badge variant="default" className="flex items-center gap-1 bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
+                <Badge variant="default" className="flex items-center gap-1 border-green-300 bg-green-100 text-green-800 dark:border-green-800 dark:bg-green-900/50 dark:text-green-300">
                     <Star className="h-3 w-3" /> Verified
                 </Badge>
              )}
@@ -148,7 +149,7 @@ export function ApplyInternshipDialog({ internship }: { internship: Internship }
                 </Button>
             </DialogClose>
             <Button onClick={handleApply} disabled={isApplying}>
-                {isApplying ? 'Submitting...' : 'Confirm Application'}
+                {isApplying ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Submitting...</> : 'Confirm Application'}
             </Button>
         </DialogFooter>
       </DialogContent>

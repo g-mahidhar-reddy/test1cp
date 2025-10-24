@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import {
@@ -99,7 +97,8 @@ function AccountTab() {
     if (!selectedCertFile || !user || !firestore) return;
 
     setIsUploadingCert(true);
-    const certificateId = doc(collection(firestore, 'id')).id;
+    const newCertDocRef = doc(collection(firestore, 'certificates')); // Generate a new doc ref with a unique ID
+    const certificateId = newCertDocRef.id;
     const storageRef = ref(storage, `certificates/${user.id}/${certificateId}-${selectedCertFile.name}`);
 
     try {
@@ -113,8 +112,7 @@ function AccountTab() {
         uploadedAt: serverTimestamp(),
       };
       
-      const certDocRef = doc(firestore, 'certificates', certificateId);
-      await setDoc(certDocRef, newCertificate);
+      await setDoc(newCertDocRef, newCertificate);
       
       setCertificates(prevCerts => [...prevCerts, { ...newCertificate, id: certificateId, uploadedAt: new Date() }]);
       setSelectedCertFile(null);
@@ -664,5 +662,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-
-    

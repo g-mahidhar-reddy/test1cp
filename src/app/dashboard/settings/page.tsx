@@ -128,27 +128,22 @@ function AccountTab() {
     if (!selectedCertFile || !user || !firestore) return;
   
     setIsUploadingCert(true);
-    const localFile = selectedCertFile; // Keep a local reference
+    const localFile = selectedCertFile; 
     const certificateId = doc(collection(firestore, 'certificates')).id;
     const storageRef = ref(storage, `certificates/${user.id}/${certificateId}-${localFile.name}`);
   
-    // --- Optimistic UI Update ---
-    const tempUrl = URL.createObjectURL(localFile);
     const optimisticCert: CertificateType & { isOptimistic?: boolean } = {
       id: certificateId,
       userId: user.id,
       certificateName: localFile.name,
-      fileUrl: tempUrl,
+      fileUrl: URL.createObjectURL(localFile),
       uploadedAt: new Date(),
       isOptimistic: true,
     };
     setCertificates(prevCerts => [...prevCerts, optimisticCert]);
-    setSelectedCertFile(null); // Clear input
-    setIsUploadingCert(false); // Unlock the UI immediately
-  
+    setSelectedCertFile(null); 
     toast({ title: "Uploading...", description: "Your certificate is being uploaded in the background." });
-  
-    // --- Truly Non-Blocking Background Processing ---
+
     uploadBytes(storageRef, localFile)
       .then(snapshot => getDownloadURL(snapshot.ref))
       .then(downloadURL => {
@@ -160,7 +155,6 @@ function AccountTab() {
         };
         const certDocRef = doc(firestore, 'certificates', certificateId);
         
-        // This promise is not awaited in the main function flow
         return setDoc(certDocRef, newCertificateData).then(() => downloadURL);
       })
       .then((downloadURL) => {
@@ -168,7 +162,6 @@ function AccountTab() {
           title: "Success!",
           description: `${localFile.name} has been securely saved.`,
         });
-        // Finalize the optimistic update with the real URL
         setCertificates(prevCerts => prevCerts.map(cert =>
           cert.id === certificateId ? { ...cert, fileUrl: downloadURL, isOptimistic: false } : cert
         ));
@@ -180,10 +173,8 @@ function AccountTab() {
           title: "Upload Failed",
           description: `Could not upload ${localFile.name}. Please try again.`,
         });
-        // Revert the optimistic UI update on any failure
         setCertificates(prevCerts => prevCerts.filter(cert => cert.id !== certificateId));
         
-        // Emit a contextual error for debugging security rules
         const isStorageError = error.code?.startsWith('storage/');
         const path = isStorageError ? storageRef.fullPath : `certificates/${certificateId}`;
         const operation = isStorageError ? 'create' : 'write';
@@ -193,6 +184,8 @@ function AccountTab() {
           operation: operation,
         });
         errorEmitter.emit('permission-error', permissionError);
+      }).finally(() => {
+        setIsUploadingCert(false);
       });
   };
 
@@ -236,8 +229,9 @@ function AccountTab() {
   const handleDeleteCertificate = (certificate: CertificateType) => {
     if (!user || !firestore) return;
 
-    const certDocRef = doc(firestore, 'certificates', certificate.id);
+    // Correctly create a storage reference from the download URL
     const fileRef = ref(storage, certificate.fileUrl);
+    const certDocRef = doc(firestore, 'certificates', certificate.id);
 
     // Optimistically remove from UI
     const originalCerts = certificates;
@@ -262,6 +256,11 @@ function AccountTab() {
               operation: 'delete',
           });
           errorEmitter.emit('permission-error', permissionError);
+          toast({
+            variant: "destructive",
+            title: "Delete Failed",
+            description: `Could not delete ${certificate.certificateName}. Please check permissions.`,
+          });
       });
   };
 
@@ -718,6 +717,8 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+    
 
     
 

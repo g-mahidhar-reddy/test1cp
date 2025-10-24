@@ -1,15 +1,65 @@
-import { Bot, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { InternshipCard } from "@/components/internship-card";
-import { mockInternships } from "@/lib/data";
+'use client';
 
-// This component will be a server component in a real app,
-// calling a server action to get AI recommendations.
-// For now, it's a static page.
+import React, { useState, useTransition } from 'react';
+import { Bot, Sparkles, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { InternshipCard } from '@/components/internship-card';
+import { mockInternships } from '@/lib/data';
+import { recommendInternships, type RecommendationInput, type RecommendationOutput, type StudentProfile } from '@/ai/ai-internship-recommendation';
+import { useToast } from '@/hooks/use-toast';
+import type { Internship } from '@/lib/types';
+
+
+// Mock student profile - in a real app, this would be fetched from your database for the logged-in user.
+const mockStudentProfile: StudentProfile = {
+  studentId: 'student1',
+  skills: ['React', 'TypeScript', 'Node.js', 'Firebase', 'Data Analysis'],
+  interests: ['Web Development', 'Artificial Intelligence', 'Startups'],
+  pastExperiences: 'Developed a full-stack web application for a university project using the MERN stack. Contributed to an open-source library for data visualization.',
+  academicAchievements: 'Dean\'s List for two consecutive semesters. Published a paper on efficient sorting algorithms in the university journal. GPA: 3.8/4.0',
+};
+
 
 export default function RecommendationsPage() {
-  const recommendedInternships = mockInternships.slice(0, 2);
+  const [recommendations, setRecommendations] = useState<RecommendationOutput>([]);
+  const [isPending, startTransition] = useTransition();
+  const { toast } = useToast();
+
+  const handleGetRecommendations = () => {
+    startTransition(async () => {
+      try {
+        const input: RecommendationInput = {
+          studentProfile: mockStudentProfile,
+          // Convert mockInternships to the schema expected by the AI flow
+          internships: mockInternships.map(i => ({
+            id: i.id,
+            title: i.title,
+            companyName: i.companyName,
+            description: i.description,
+            requiredSkills: i.requiredSkills,
+            credits: i.credits,
+            duration: i.duration,
+            location: i.location,
+            stipend: i.stipend,
+          })),
+        };
+        const result = await recommendInternships(input);
+        setRecommendations(result);
+        toast({
+          title: "Recommendations Ready!",
+          description: `We found ${result.length} great opportunities for you.`,
+        });
+      } catch (error) {
+        console.error("Failed to get recommendations:", error);
+        toast({
+          variant: "destructive",
+          title: "Uh oh! Something went wrong.",
+          description: "There was a problem getting your recommendations. Please try again.",
+        });
+      }
+    });
+  };
 
   return (
     <div className="grid flex-1 auto-rows-max gap-4">
@@ -20,9 +70,18 @@ export default function RecommendationsPage() {
             Get personalized internship suggestions based on your profile and skills.
           </p>
         </div>
-        <Button>
-          <Sparkles className="mr-2 h-4 w-4" />
-          Get New Recommendations
+        <Button onClick={handleGetRecommendations} disabled={isPending}>
+          {isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Analyzing...
+            </>
+          ) : (
+            <>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Get New Recommendations
+            </>
+          )}
         </Button>
       </div>
       <Card>
@@ -36,10 +95,20 @@ export default function RecommendationsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {recommendedInternships.length > 0 ? (
+          {isPending ? (
+             <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 py-20 text-center">
+                <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+                <p className="text-muted-foreground font-semibold">Finding the best internships for you...</p>
+             </div>
+          ) : recommendations.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-2">
-              {recommendedInternships.map((internship) => (
-                <InternshipCard key={internship.id} internship={internship} />
+              {recommendations.map((rec) => (
+                <div key={rec.id} className="relative">
+                   <InternshipCard internship={rec as unknown as Internship} />
+                   <div className="mt-2 text-sm text-muted-foreground p-2 bg-muted/50 rounded-b-lg">
+                    <strong>Reason:</strong> {rec.reason}
+                   </div>
+                </div>
               ))}
             </div>
           ) : (

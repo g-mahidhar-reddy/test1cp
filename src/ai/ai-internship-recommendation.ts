@@ -27,16 +27,19 @@ export type StudentProfile = z.infer<typeof StudentProfileSchema>;
 
 // Define the schema for an internship.
 const InternshipSchema = z.object({
-  internshipId: z.string().describe('The unique identifier for the internship.'),
+  id: z.string().describe('The unique identifier for the internship.'),
   title: z.string().describe('The title of the internship.'),
-  company: z.string().describe('The company offering the internship.'),
+  companyName: z.string().describe('The company offering the internship.'),
   description: z.string().describe('A detailed description of the internship role and responsibilities.'),
-  skillsRequired: z.array(z.string()).describe('A list of skills required for the internship.'),
-  interestsAligned: z.array(z.string()).describe('A list of interests that align with the internship.'),
-  rating: z.number().optional().describe('Rating of the internship based on past performance.'),
+  requiredSkills: z.array(z.string()).describe('A list of skills required for the internship.'),
+  credits: z.number().optional().describe('Number of credits for the internship.'),
+  duration: z.string().optional().describe('Duration of the internship'),
+  location: z.string().optional().describe('Location of the internship'),
+  stipend: z.string().optional().describe('Stipend for the internship'),
+  verified: z.boolean().optional().describe('Whether the internship is verified'),
+  companyLogoUrl: z.string().optional().describe('URL of the company logo'),
+  postedBy: z.string().optional().describe('ID of the user who posted the internship'),
 });
-
-export type Internship = z.infer<typeof InternshipSchema>;
 
 // Define the input schema for the recommendation flow.
 const RecommendationInputSchema = z.object({
@@ -50,46 +53,56 @@ export type RecommendationInput = z.infer<typeof RecommendationInputSchema>;
 const RecommendationOutputSchema = z.array(
   InternshipSchema.extend({
     relevanceScore: z.number().describe('A score indicating the relevance of the internship to the student.'),
+    reason: z.string().describe('A brief explanation of why this internship is recommended.'),
   })
 );
 
 export type RecommendationOutput = z.infer<typeof RecommendationOutputSchema>;
-
-const filterInternships = ai.defineTool({
-  name: 'filterInternships',
-  description: 'Filters a list of internships based on a relevance score threshold.',
-  inputSchema: z.object({
-    internships: z.array(InternshipSchema).describe('The list of internships to filter.'),
-    relevanceThreshold: z.number().describe('The minimum relevance score for an internship to be included.'),
-  }),
-  outputSchema: z.array(InternshipSchema),
-  async resolve(input) {
-    return input.internships.filter(internship => {
-      // Assuming relevanceScore is added to the internship object before this tool is called
-      return (internship as any).relevanceScore >= input.relevanceThreshold;
-    });
-  },
-});
 
 // Define the prompt for recommending internships.
 const recommendInternshipsPrompt = ai.definePrompt({
   name: 'recommendInternshipsPrompt',
   input: {schema: RecommendationInputSchema},
   output: {schema: RecommendationOutputSchema},
-  tools: [filterInternships],
-  prompt: `You are an AI assistant designed to recommend internships to students based on their profiles and internship descriptions.
+  prompt: `You are an expert career counselor AI for students. Your task is to recommend internships to students based on their profile and the available internship descriptions.
 
-  Given the following student profile:
-  ```json
-  {{studentProfile}}
-  ```
+  Analyze the provided student profile:
+  - Skills: {{studentProfile.skills}}
+  - Interests: {{studentProfile.interests}}
+  - Past Experiences: {{studentProfile.pastExperiences}}
+  - Academic Achievements: {{studentProfile.academicAchievements}}
 
-  And the following list of internships:
-  ```json
+  Now, evaluate the following list of available internships:
   {{internships}}
-  ```
 
-  Recommend the internships that are most relevant to the student. For each internship, calculate a relevance score based on how well the student's skills and interests align with the internship requirements and interests.
+  For each internship, calculate a 'relevanceScore' from 0.0 to 1.0, where 1.0 is a perfect match. The score should be based on a holistic analysis of:
+  1.  **Skill Match**: How well the student's skills align with the internship's required skills.
+  2.  **Interest Alignment**: How well the internship's domain aligns with the student's interests.
+  3.  **Experience Synergy**: How the student's past experiences and academic background might contribute to or benefit from this internship.
 
-  Include a relevanceScore (0-1) in the result. 1 means perfect match, 0 means not relevant. Only return internships that have a relevanceScore > 0.2.
-  Consider that the internships may have a 
+  In addition to the score, provide a short, compelling 'reason' (max 20 words) for each recommendation, highlighting the key matching factor (e.g., "Matches your expertise in Python and Data Science.").
+
+  **Crucially, only return a list of internships that have a relevanceScore greater than 0.3.** Do not include internships that are a poor match. The final list should be sorted by relevanceScore in descending order.
+  `,
+});
+
+// Define the flow that uses the prompt.
+const recommendInternshipsFlow = ai.defineFlow(
+  {
+    name: 'recommendInternshipsFlow',
+    inputSchema: RecommendationInputSchema,
+    outputSchema: RecommendationOutputSchema,
+  },
+  async input => {
+    const {output} = await recommendInternshipsPrompt(input);
+    return output || [];
+  }
+);
+
+
+// Export a wrapper function to be called from server components/actions.
+export async function recommendInternships(
+  input: RecommendationInput
+): Promise<RecommendationOutput> {
+  return recommendInternshipsFlow(input);
+}

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {
@@ -98,14 +99,14 @@ function AccountTab() {
     if (!selectedCertFile || !user || !firestore) return;
 
     setIsUploadingCert(true);
-    const certificateId = doc(collection(firestore, 'id')).id; // Generate a new ID
+    const certificateId = doc(collection(firestore, 'id')).id;
     const storageRef = ref(storage, `certificates/${user.id}/${certificateId}-${selectedCertFile.name}`);
 
     try {
       const snapshot = await uploadBytes(storageRef, selectedCertFile);
       const downloadURL = await getDownloadURL(snapshot.ref);
 
-      const newCertificate: Omit<CertificateType, 'id'> = {
+      const newCertificate: Omit<CertificateType, 'id'> & { uploadedAt: any } = {
         userId: user.id,
         certificateName: selectedCertFile.name,
         fileUrl: downloadURL,
@@ -115,7 +116,6 @@ function AccountTab() {
       const certDocRef = doc(firestore, 'certificates', certificateId);
       await setDoc(certDocRef, newCertificate);
       
-      // Add the new certificate to the local state with the generated ID
       setCertificates(prevCerts => [...prevCerts, { ...newCertificate, id: certificateId, uploadedAt: new Date() }]);
       setSelectedCertFile(null);
 
@@ -186,15 +186,12 @@ function AccountTab() {
     if (!user || !firestore) return;
 
     try {
-        // 1. Delete the Firestore document
         const certDocRef = doc(firestore, 'certificates', certificate.id);
         await deleteDoc(certDocRef);
 
-        // 2. Delete the file from Firebase Storage
         const fileRef = ref(storage, certificate.fileUrl);
         await deleteObject(fileRef);
 
-        // 3. Update local state
         setCertificates(certificates.filter(c => c.id !== certificate.id));
 
         toast({
@@ -667,3 +664,5 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+    

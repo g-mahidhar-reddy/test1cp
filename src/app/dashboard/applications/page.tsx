@@ -34,10 +34,13 @@ function StudentApplicationsView() {
 
   const applicationsQuery = useMemo(() => {
     if (!user || !firestore) return null;
-    return query(
+    const q = query(
       collection(firestore, `users/${user.id}/applications`),
       orderBy('appliedDate', 'desc')
     );
+    // @ts-ignore
+    q.__memo = true;
+    return q;
   }, [user, firestore]);
 
   const { data: applications, isLoading } = useCollection<Application>(applicationsQuery);
@@ -106,7 +109,10 @@ function IndustryApplicantsView() {
     const applicationsQuery = useMemo(() => {
         if (!user || !firestore) return null;
         // This is a simplified query. A real implementation would be more complex.
-        return query(collection(firestore, `applications`));
+        const q = query(collection(firestore, `applications`));
+        // @ts-ignore
+        q.__memo = true;
+        return q;
     }, [user, firestore]);
     
     const { data: applications, isLoading } = useCollection<Application>(applicationsQuery);

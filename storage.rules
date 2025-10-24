@@ -2,19 +2,11 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Match any file path
-    match /{allPaths=**} {
-      // Default deny all access
-      allow read, write: if false;
-    }
-
-    // Allow users to manage their own resume files
-    match /resumes/{userId}/{fileName} {
+    // Allow users to manage their own resumes and certificates
+    match /resumes/{userId}/{allPaths=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-
-    // Allow users to manage their own certificate files
-    match /certificates/{userId}/{fileName} {
+    match /certificates/{userId}/{allPaths=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }

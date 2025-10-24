@@ -7,6 +7,7 @@ import {
   Briefcase,
   FileText,
   Users,
+  Loader2,
 } from "lucide-react";
 import {
   Card,
@@ -79,11 +80,18 @@ function StudentDashboard() {
 
     const recentApplications = applications?.slice(0, 5) || [];
 
+    const loadingStats = [
+        { title: "Internships Applied", value: "...", icon: Briefcase },
+        { title: "Active Applications", value: "...", icon: Activity },
+        { title: "Credits Earned", value: "...", icon: ArrowUpRight },
+        { title: "Companies Connected", value: "...", icon: Users },
+    ];
+
     return (
         <>
             <div className="grid gap-4 md:grid-cols-2 md:gap-8 lg:grid-cols-4">
-                {(isLoadingApplications ? Array(4).fill({}) : studentStats).map((stat, index) => (
-                    <StatCard key={index} {...stat} />
+                {(isLoadingApplications ? loadingStats : studentStats).map((stat, index) => (
+                    <StatCard key={index} {...stat} isLoading={isLoadingApplications} />
                 ))}
             </div>
             <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
@@ -178,11 +186,18 @@ function FacultyDashboard() {
         { title: "Total Credits Approved", value: "1,200", icon: ArrowUpRight },
     ];
     
+     const loadingStats: StatCardData[] = [
+        { title: "Active MoUs", value: '...', icon: FileText },
+        { title: "Students on Internships", value: '...', icon: Users },
+        { title: "Companies Partnered", value: '...', icon: Briefcase },
+        { title: "Total Credits Approved", value: '...', icon: ArrowUpRight },
+    ];
+
     return (
         <>
             <div className="grid gap-4 md:grid-cols-2 md:gap-8 lg:grid-cols-4">
-                 {(isLoadingMous ? Array(4).fill({}) : facultyStats).map((stat, index) => (
-                    <StatCard key={index} {...stat} />
+                 {(isLoadingMous ? loadingStats : facultyStats).map((stat, index) => (
+                    <StatCard key={index} {...stat} isLoading={isLoadingMous} />
                 ))}
             </div>
             {/* Add Faculty specific charts/tables here */}
@@ -222,11 +237,20 @@ function IndustryDashboard() {
         { title: "Successful Hires", value: applications?.filter(a => a.status === 'accepted').length.toString() || '0', icon: ArrowUpRight },
     ];
 
+    const loadingStats: StatCardData[] = [
+        { title: "Active Internships", value: '...', icon: Briefcase },
+        { title: "Total Applicants", value: '...', icon: Users },
+        { title: "Shortlisted Candidates", value: '...', icon: Activity },
+        { title: "Successful Hires", value: '...', icon: ArrowUpRight },
+    ];
+    
+    const isLoading = isLoadingInternships || isLoadingApplications;
+
     return (
         <>
             <div className="grid gap-4 md:grid-cols-2 md:gap-8 lg:grid-cols-4">
-                 {(isLoadingInternships || isLoadingApplications ? Array(4).fill({}) : industryStats).map((stat, index) => (
-                    <StatCard key={index} {...stat} />
+                 {(isLoading ? loadingStats : industryStats).map((stat, index) => (
+                    <StatCard key={index} {...stat} isLoading={isLoading} />
                 ))}
             </div>
              {/* Add Industry specific charts/tables here */}
@@ -250,7 +274,7 @@ export default function DashboardPage() {
       default:
         return (
              <div className="flex h-64 items-center justify-center">
-                <p className="text-muted-foreground">Loading dashboard...</p>
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
         );
     }

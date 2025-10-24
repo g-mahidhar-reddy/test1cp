@@ -23,19 +23,39 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import React, { useState } from 'react';
 
-const predefinedSkills = ["Communication", "Web Development", "Python", "Data Analysis", "Machine Learning", "UI/UX Design", "Marketing", "Cloud Computing", "Leadership"];
 const userCertificates = [
     { id: 'cert1', name: 'AI Internship Certificate.pdf', url: '#', uploadedAt: '2024-07-20' },
     { id: 'cert2', name: 'Advanced React Course.png', url: '#', uploadedAt: '2024-06-15' }
 ];
 
+const predefinedSkills = {
+  "Programming & Tech": ["Python", "Java", "JavaScript", "HTML", "CSS", "React", "Node.js", "Firebase", "SQL", "C++", "Machine Learning", "Data Science", "Cloud Computing", "Cybersecurity", "API Development"],
+  "Design & Creativity": ["UI/UX Design", "Graphic Design", "Figma", "Adobe Photoshop", "Video Editing", "3D Modeling"],
+  "Business & Management": ["Communication", "Team Leadership", "Marketing", "Project Management", "Entrepreneurship", "Sales Strategy"],
+  "Personal & Soft Skills": ["Problem Solving", "Critical Thinking", "Collaboration", "Creativity", "Adaptability"],
+};
+
+
 function AccountTab() {
   const { user } = useAuth();
+  const [userSkills, setUserSkills] = useState<string[]>(user?.skills || []);
   
   if (!user) {
     return null;
   }
+
+  const handleAddSkill = (skill: string) => {
+    if (skill && !userSkills.includes(skill)) {
+      setUserSkills([...userSkills, skill]);
+    }
+  };
+
+  const handleRemoveSkill = (skillToRemove: string) => {
+    setUserSkills(userSkills.filter(skill => skill !== skillToRemove));
+  };
+
 
   return (
     <div className="space-y-8">
@@ -178,37 +198,45 @@ function AccountTab() {
         {/* Skills Card */}
         <Card>
             <CardHeader>
-                <CardTitle>Skills</CardTitle>
+                <CardTitle>Skills & Expertise</CardTitle>
                 <CardDescription>Manage your skills to get better internship recommendations.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
                  <div>
                     <h4 className="font-medium text-sm mb-2">Your Skills</h4>
                      <div className="flex flex-wrap gap-2">
-                        {user.skills?.map(skill => (
-                             <Badge key={skill} variant="secondary" className="flex items-center gap-1.5 pr-1">
+                        {userSkills.length > 0 ? userSkills.map(skill => (
+                             <Badge key={skill} variant="secondary" className="flex items-center gap-1.5 pr-1 text-base">
                                 {skill}
-                                <button className="rounded-full hover:bg-background/50 p-0.5">
+                                <button onClick={() => handleRemoveSkill(skill)} className="rounded-full hover:bg-background/50 p-0.5">
                                     <X className="h-3 w-3" />
                                     <span className="sr-only">Remove {skill}</span>
                                 </button>
                             </Badge>
-                        ))}
+                        )) : <p className="text-sm text-muted-foreground">Add skills from the suggestions below or add your own.</p>}
                      </div>
                 </div>
-                 <div>
-                    <h4 className="font-medium text-sm mb-2">Add Skills</h4>
-                    <div className="flex flex-wrap gap-2">
-                         {predefinedSkills.map(skill => (
-                            <Button key={skill} variant="outline" size="sm">
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                {skill}
-                            </Button>
-                        ))}
-                        <Button variant="outline" size="sm">
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Add Custom Skill
-                        </Button>
+                 <div className="space-y-4">
+                    <h4 className="font-medium text-sm">Suggested Skills</h4>
+                     {Object.entries(predefinedSkills).map(([category, skills]) => (
+                        <div key={category}>
+                            <h5 className="font-semibold text-xs text-muted-foreground mb-2">{category}</h5>
+                            <div className="flex flex-wrap gap-2">
+                                {skills.map(skill => !userSkills.includes(skill) && (
+                                    <Button key={skill} variant="outline" size="sm" onClick={() => handleAddSkill(skill)}>
+                                        <PlusCircle className="mr-2 h-4 w-4" />
+                                        {skill}
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                    <div className="flex items-center gap-2">
+                      <Input placeholder="Add a custom skill..."/>
+                      <Button variant="outline" size="sm">
+                          <PlusCircle className="mr-2 h-4 w-4" />
+                          Add Custom Skill
+                      </Button>
                     </div>
                 </div>
             </CardContent>

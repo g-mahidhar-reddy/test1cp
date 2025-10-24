@@ -37,6 +37,13 @@
         "settings": {
           "type": "string",
           "description": "User-specific settings stored as a JSON string."
+        },
+        "skills": {
+          "type": "array",
+          "description": "List of user's skills.",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [

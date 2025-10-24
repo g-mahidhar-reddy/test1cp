@@ -11,6 +11,7 @@ import {
   PanelLeft,
   BookOpenCheck,
   Search,
+  ClipboardList,
 } from "lucide-react";
 import {
   Breadcrumb,
@@ -33,6 +34,7 @@ const navItems = {
     { href: "/dashboard", icon: Home, label: "Dashboard" },
     { href: "/dashboard/internships", icon: Briefcase, label: "Internships" },
     { href: "/dashboard/applications", icon: FileText, label: "My Applications" },
+    { href: "/dashboard/resume", icon: ClipboardList, label: "My Resume" },
     { href: "/dashboard/recommendations", icon: Bot, label: "AI Recommendations" },
   ],
   faculty: [

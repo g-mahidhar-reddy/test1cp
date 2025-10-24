@@ -65,7 +65,7 @@ const facultyStats = [
 
 const industryStats = [
   { title: "Active Internships", value: "5", icon: Briefcase },
-  { title:alue: "250", icon: Users },
+  { title: "Total Applicants", value: "250", icon: Users },
   { title: "Shortlisted Candidates", value: "15", icon: Activity },
   { title: "Successful Hires", value: "4", icon: ArrowUpRight },
 ];

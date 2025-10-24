@@ -93,11 +93,14 @@ export default function DashboardPage() {
   
   const applicationsQuery = useMemo(() => {
     if (!user || !firestore) return null;
-    return query(
+    const q = query(
       collection(firestore, `users/${user.id}/applications`),
       orderBy('appliedDate', 'desc'),
       limit(5)
     );
+    // @ts-ignore
+    q.__memo = true;
+    return q;
   }, [user, firestore]);
 
   const { data: recentApplications, isLoading: isLoadingApplications } = useCollection<Application>(applicationsQuery);

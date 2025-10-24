@@ -42,6 +42,9 @@ export default function RecommendationsPage() {
             duration: i.duration,
             location: i.location,
             stipend: i.stipend,
+            verified: i.verified,
+            companyLogoUrl: i.companyLogoUrl,
+            postedBy: i.postedBy,
           })),
         };
         const result = await recommendInternships(input);

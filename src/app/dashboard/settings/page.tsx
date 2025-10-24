@@ -229,11 +229,9 @@ function AccountTab() {
   const handleDeleteCertificate = (certificate: CertificateType) => {
     if (!user || !firestore) return;
 
-    // Correctly create a storage reference from the download URL
     const fileRef = ref(storage, certificate.fileUrl);
     const certDocRef = doc(firestore, 'certificates', certificate.id);
 
-    // Optimistically remove from UI
     const originalCerts = certificates;
     setCertificates(certificates.filter(c => c.id !== certificate.id));
 
@@ -248,7 +246,6 @@ function AccountTab() {
           });
       })
       .catch((error: any) => {
-          // Revert UI on failure
           setCertificates(originalCerts);
           const isStorageError = error.code && error.code.startsWith('storage/');
           const permissionError = new FirestorePermissionError({

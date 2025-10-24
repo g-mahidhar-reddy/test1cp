@@ -97,7 +97,7 @@ function AccountTab() {
     if (!selectedCertFile || !user || !firestore) return;
   
     setIsUploadingCert(true);
-    const newCertDocRef = doc(collection(firestore, 'certificates'));
+    const newCertDocRef = doc(collection(firestore, 'certificates')); // Generate ID upfront
     const certificateId = newCertDocRef.id;
     const storageRef = ref(storage, `certificates/${user.id}/${certificateId}-${selectedCertFile.name}`);
   
@@ -106,8 +106,8 @@ function AccountTab() {
       const snapshot = await uploadBytes(storageRef, selectedCertFile);
       const downloadURL = await getDownloadURL(snapshot.ref);
   
-      // 2. Create certificate metadata to save in Firestore
-      const newCertificate: Omit<CertificateType, 'id'> = {
+      // 2. Create certificate metadata
+      const newCertificateData: Omit<CertificateType, 'id'> = {
         userId: user.id,
         certificateName: selectedCertFile.name,
         fileUrl: downloadURL,
@@ -115,11 +115,11 @@ function AccountTab() {
       };
   
       // 3. Save metadata to Firestore
-      await setDoc(newCertDocRef, newCertificate);
+      await setDoc(newCertDocRef, newCertificateData);
   
       // 4. Update UI state on success
-      setCertificates(prevCerts => [...prevCerts, { ...newCertificate, id: certificateId, uploadedAt: new Date() } as CertificateType]);
-      setSelectedCertFile(null);
+      setCertificates(prevCerts => [...prevCerts, { ...newCertificateData, id: certificateId, uploadedAt: new Date() } as CertificateType]);
+      setSelectedCertFile(null); // Clear file input display
       toast({
         title: "Success!",
         description: "Your certificate has been uploaded.",
@@ -128,17 +128,24 @@ function AccountTab() {
     } catch (error: any) {
       console.error('Certificate upload failed:', error);
   
-      // Check if it's a Firestore permission error
-      if (error.code && (error.code.includes('permission-denied') || error.code.includes('unauthenticated'))) {
+      // This is a generic way to check for storage permission errors
+      if (error.code === 'storage/unauthorized' || error.code === 'storage/retry-limit-exceeded') {
         const permissionError = new FirestorePermissionError({
+          path: storageRef.fullPath, // Use storage path
+          operation: 'write', // Storage operations are simplified to 'write' for this context
+          requestResourceData: {
+            name: selectedCertFile.name,
+            size: selectedCertFile.size,
+            contentType: selectedCertFile.type
+          },
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      } else if (error.code && (error.code.includes('permission-denied') || error.code.includes('unauthenticated'))) {
+         // This handles Firestore permission errors on setDoc
+         const permissionError = new FirestorePermissionError({
           path: newCertDocRef.path,
           operation: 'create',
-          requestResourceData: {
-            userId: user.id,
-            certificateName: selectedCertFile.name,
-            fileUrl: '--- URL would be here ---',
-            uploadedAt: '--- Server timestamp ---'
-          },
+          requestResourceData: { userId: user.id, certificateName: selectedCertFile.name } // Example data
         });
         errorEmitter.emit('permission-error', permissionError);
       }
@@ -213,12 +220,20 @@ function AccountTab() {
             description: `${certificate.certificateName} has been removed.`,
         });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error deleting certificate:", error);
         
+        let operation: 'delete' = 'delete';
+        let path: string = '';
+        if (error.code && error.code.startsWith('storage')) {
+          path = certificate.fileUrl; // or a reconstructed path if needed
+        } else {
+          path = `certificates/${certificate.id}`;
+        }
+
         const permissionError = new FirestorePermissionError({
-            path: `certificates/${certificate.id}`,
-            operation: 'delete',
+            path: path,
+            operation: operation,
         });
         errorEmitter.emit('permission-error', permissionError);
         
@@ -680,3 +695,5 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+    

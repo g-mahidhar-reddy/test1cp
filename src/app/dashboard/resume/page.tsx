@@ -76,7 +76,10 @@ export default function ResumePage() {
 
     setIsLoading(true);
     const userDocRef = doc(firestore, 'users', user.id);
+    const filePath = `resumes/${user.id}/${selectedFile.name}`;
+    const resumeRef = ref(storage, filePath);
     const resumeFolderRef = ref(storage, `resumes/${user.id}`);
+
 
     try {
       // 1. Delete existing resumes if any
@@ -86,8 +89,6 @@ export default function ResumePage() {
       }
 
       // 2. Upload the new file
-      const filePath = `resumes/${user.id}/${selectedFile.name}`;
-      const resumeRef = ref(storage, filePath);
       await uploadBytes(resumeRef, selectedFile);
       
       toast({
@@ -130,22 +131,30 @@ export default function ResumePage() {
       setSelectedFile(null);
 
     } catch (error: any) {
-      console.error('Upload and analysis failed:', error);
-       // This will catch both storage and firestore errors
-      const operation = error.code?.startsWith('storage/') ? 'create' : 'update';
-      const path = operation === 'create' ? `resumes/${user.id}/${selectedFile.name}` : userDocRef.path;
-      
-      const permissionError = new FirestorePermissionError({
-        path: path,
-        operation: operation,
-      });
-      errorEmitter.emit('permission-error', permissionError);
+        const isStorageError = error.code && error.code.startsWith('storage/');
+        let permissionError;
 
-      toast({
-        variant: "destructive",
-        title: "Upload failed",
-        description: "There was a problem processing your resume. Please check permissions and try again.",
-      });
+        if (isStorageError) {
+            // Handle Storage permission error
+            permissionError = new FirestorePermissionError({
+                path: filePath, // Storage path
+                operation: 'create',
+            });
+        } else {
+            // Handle Firestore permission error (or other errors)
+            permissionError = new FirestorePermissionError({
+                path: userDocRef.path, // Firestore path
+                operation: 'update',
+            });
+        }
+        
+        errorEmitter.emit('permission-error', permissionError);
+
+        toast({
+            variant: "destructive",
+            title: "Upload failed",
+            description: "There was a problem processing your resume. Please check permissions and try again.",
+        });
     } finally {
       setIsLoading(false);
     }

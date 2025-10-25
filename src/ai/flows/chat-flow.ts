@@ -12,6 +12,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import type { ChatInput, Message } from '@/lib/types';
 import { ChatInputSchema } from '@/lib/types';
+import {type GenerateRequestHistoryPart} from '@genkit-ai/google-genai';
 
 
 // The main exported function to be called from the UI
@@ -28,14 +29,13 @@ const chatFlow = ai.defineFlow(
   },
   async ({ history, message }) => {
     
-    const augmentedHistory = history.map(msg => ({
+    const augmentedHistory: GenerateRequestHistoryPart[] = history.map(msg => ({
       role: msg.role,
       content: [{ text: msg.content }],
     }));
 
     const response = await ai.generate({
       model: 'gemini-1.5-flash-latest',
-      // @ts-ignore - The history type from the SDK has a different structure
       history: augmentedHistory,
       prompt: message,
     });

@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -12,6 +13,7 @@ import {
   LogOut,
   Settings,
   ClipboardList,
+  MessageSquare,
 } from "lucide-react";
 import {
   Tooltip,
@@ -29,17 +31,20 @@ const navItems = {
     { href: "/dashboard/applications", icon: FileText, label: "My Applications" },
     { href: "/dashboard/resume", icon: ClipboardList, label: "My Resume" },
     { href: "/dashboard/recommendations", icon: Bot, label: "AI Recommendations" },
+    { href: "/dashboard/chatbot", icon: MessageSquare, label: "Chatbot" },
   ],
   faculty: [
     { href: "/dashboard", icon: Home, label: "Dashboard" },
     { href: "/dashboard/mous", icon: Users, label: "Manage MoUs" },
     { href: "/dashboard/reports", icon: BarChart, label: "Reports" },
     { href: "/dashboard/internships", icon: Briefcase, label: "All Internships" },
+    { href: "/dashboard/chatbot", icon: MessageSquare, label: "Chatbot" },
   ],
   industry: [
     { href: "/dashboard", icon: Home, label: "Dashboard" },
     { href: "/dashboard/manage-internships", icon: Briefcase, label: "Manage Internships" },
     { href: "/dashboard/applications", icon: FileText, label: "Applicants" },
+    { href: "/dashboard/chatbot", icon: MessageSquare, label: "Chatbot" },
   ],
 };
 

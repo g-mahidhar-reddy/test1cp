@@ -12,28 +12,15 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import type { ChatInput, Message } from '@/lib/types';
 import { ChatInputSchema } from '@/lib/types';
-import { googleAI } from '@genkit-ai/google-genai';
 
 // The main exported function to be called from the UI
 export async function chat(input: ChatInput): Promise<string> {
   // Pass the history and message directly to the flow
-  const response = await chatFlow({
-    history: input.history,
-    message: input.message,
-  });
+  const response = await chatFlow(input);
   return response;
 }
 
-// Define the Genkit flow with the correct input schema
-const chatFlow = ai.defineFlow(
-  {
-    name: 'chatFlow',
-    inputSchema: ChatInputSchema, // Use the schema with the Message array
-    outputSchema: z.string(),
-  },
-  async ({ history, message }) => {
-    
-    const systemPrompt = `You are PrashikshanConnect AI, a helpful and friendly AI assistant integrated into the PrashikshanConnect platform.
+const systemPrompt = `You are PrashikshanConnect AI, a helpful and friendly AI assistant integrated into the PrashikshanConnect platform.
 
 Your purpose is to assist users based on their role:
 - **For Students:** Act as a career counselor. Provide advice on finding internships, improving their resumes, preparing for interviews, and developing new skills. You can answer questions about different career paths and what companies look for in candidates.
@@ -45,14 +32,40 @@ Do not go off-topic. All your responses should be relevant to the PrashikshanCon
 Keep your answers concise and easy to understand.
 `;
 
-    // Call ai.generate directly with the correct structure
-    const response = await ai.generate({
-      model: 'gemini-1.5-flash',
-      system: systemPrompt,
-      history: history, // Pass the existing history
-      prompt: message, // Pass the user's message as the new prompt
-    });
+const chatPrompt = ai.definePrompt(
+  {
+    name: 'chatPrompt',
+    input: { schema: ChatInputSchema },
+    output: { schema: z.string() },
+    system: systemPrompt,
+    prompt: (input) => {
+      // Create a history of messages for the prompt
+      const history = input.history.map(msg => ({
+        role: msg.role,
+        content: [{ text: msg.content }],
+      }));
 
-    return response.text || "I'm sorry, I couldn't generate a response.";
+      // Add the latest user message
+      const messages = [
+        ...history,
+        { role: 'user', content: [{ text: input.message }] },
+      ];
+      // @ts-ignore - Genkit's `definePrompt` can accept a function that returns messages
+      return messages;
+    },
+  }
+);
+
+
+// Define the Genkit flow with the correct input schema
+const chatFlow = ai.defineFlow(
+  {
+    name: 'chatFlow',
+    inputSchema: ChatInputSchema,
+    outputSchema: z.string(),
+  },
+  async (input) => {
+    const response = await chatPrompt(input);
+    return response.output || "I'm sorry, I couldn't generate a response.";
   }
 );

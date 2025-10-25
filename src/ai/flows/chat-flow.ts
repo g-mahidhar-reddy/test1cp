@@ -50,7 +50,7 @@ Keep your answers concise and easy to understand.
 
     // Call ai.generate directly with the correct structure
     const response = await ai.generate({
-      model: 'gemini-pro',
+      model: googleAI.model('gemini-pro'),
       history: [systemPrompt, ...history], // Prepend system prompt to history
       prompt: message, // Pass the user's message as the new prompt
     });

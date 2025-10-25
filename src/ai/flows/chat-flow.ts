@@ -35,7 +35,6 @@ const chatFlow = ai.defineFlow(
     }));
 
     const response = await ai.generate({
-      model: 'gemini-1.5-flash-latest',
       history: augmentedHistory,
       prompt: message,
     });

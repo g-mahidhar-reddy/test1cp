@@ -35,7 +35,6 @@ const chatFlow = ai.defineFlow(
     // Call ai.generate directly with the correct structure
     // Let Genkit infer the model from the plugin configuration.
     const response = await ai.generate({
-      model: googleAI.model('gemini-pro'),
       system: `You are PrashikshanConnect AI, a helpful and friendly AI assistant integrated into the PrashikshanConnect platform.
 
 Your purpose is to assist users based on their role:

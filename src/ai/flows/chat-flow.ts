@@ -14,29 +14,19 @@ import { z } from 'genkit';
 import type { ChatInput, Message } from '@/lib/types';
 import { ChatInputSchema } from '@/lib/types';
 
-
 // The main exported function to be called from the UI
 export async function chat(input: ChatInput): Promise<string> {
-  return chatFlow(input);
+  const result = await chatFlow(input);
+  return result.text;
 }
 
-// Define the Genkit flow
-const chatFlow = ai.defineFlow(
+const chatPrompt = ai.definePrompt(
   {
-    name: 'chatFlow',
-    inputSchema: ChatInputSchema,
-    outputSchema: z.string(),
-  },
-  async ({ history, message }) => {
-    
-    const response = await ai.generate({
-      model: googleAI.model('gemini-pro'),
-      prompt: message,
-      history: history.map(msg => ({
-        role: msg.role,
-        content: [{ text: msg.content }],
-      })),
-      system: `You are PrashikshanConnect AI, a helpful and friendly AI assistant integrated into the PrashikshanConnect platform.
+    name: 'chatPrompt',
+    input: { schema: ChatInputSchema },
+    output: { schema: z.object({ text: z.string() }) },
+
+    system: `You are PrashikshanConnect AI, a helpful and friendly AI assistant integrated into the PrashikshanConnect platform.
 
 Your purpose is to assist users based on their role:
 - **For Students:** Act as a career counselor. Provide advice on finding internships, improving their resumes, preparing for interviews, and developing new skills. You can answer questions about different career paths and what companies look for in candidates.
@@ -47,8 +37,31 @@ Your tone should be professional, encouraging, and helpful. Always provide actio
 Do not go off-topic. All your responses should be relevant to the PrashikshanConnect platform and the user's career development or administrative tasks.
 Keep your answers concise and easy to understand.
 `,
-    });
+    prompt: (input) => {
+        const history = input.history.map(msg => ({
+            role: msg.role,
+            content: [{ text: msg.content }],
+        }));
+        
+        return {
+            history,
+            prompt: input.message,
+            model: googleAI.model('gemini-pro')
+        }
+    }
+  },
+);
 
-    return response.text;
+
+// Define the Genkit flow
+const chatFlow = ai.defineFlow(
+  {
+    name: 'chatFlow',
+    inputSchema: ChatInputSchema,
+    outputSchema: z.object({ text: z.string() }),
+  },
+  async (input) => {
+    const { output } = await chatPrompt(input);
+    return output || { text: "I'm sorry, I couldn't generate a response."};
   }
 );

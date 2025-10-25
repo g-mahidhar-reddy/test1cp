@@ -26,7 +26,7 @@ const chatPrompt = ai.definePrompt(
         history: z.any(), // Keep history flexible for now
         message: z.string(),
       })},
-      output: { schema: z.string() },
+      // Let's rely on the default model and not specify output schema for basic chat
     },
     async (input) => {
         return {

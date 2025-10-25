@@ -32,10 +32,10 @@ const chatFlow = ai.defineFlow(
     outputSchema: z.string(),
   },
   async ({ history, message }) => {
-    // Call ai.generate directly with the correct structure
-    const response = await ai.generate({
-      model: 'gemini-pro',
-      system: `You are PrashikshanConnect AI, a helpful and friendly AI assistant integrated into the PrashikshanConnect platform.
+    
+    const systemPrompt: Message = {
+        role: 'model',
+        content: `You are PrashikshanConnect AI, a helpful and friendly AI assistant integrated into the PrashikshanConnect platform.
 
 Your purpose is to assist users based on their role:
 - **For Students:** Act as a career counselor. Provide advice on finding internships, improving their resumes, preparing for interviews, and developing new skills. You can answer questions about different career paths and what companies look for in candidates.
@@ -45,8 +45,13 @@ Your purpose is to assist users based on their role:
 Your tone should be professional, encouraging, and helpful. Always provide actionable advice.
 Do not go off-topic. All your responses should be relevant to the PrashikshanConnect platform and the user's career development or administrative tasks.
 Keep your answers concise and easy to understand.
-`,
-      history: history, // Pass the array directly
+`
+    };
+
+    // Call ai.generate directly with the correct structure
+    const response = await ai.generate({
+      model: 'gemini-pro',
+      history: [systemPrompt, ...history], // Prepend system prompt to history
       prompt: message, // Pass the user's message as the new prompt
     });
 

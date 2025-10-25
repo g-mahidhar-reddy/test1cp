@@ -9,22 +9,33 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { googleAI } from '@genkit-ai/google-genai';
 import { z } from 'genkit';
-import type { ChatInput, Message } from '@/lib/types';
+import type { ChatInput } from '@/lib/types';
 import { ChatInputSchema } from '@/lib/types';
 
 // The main exported function to be called from the UI
 export async function chat(input: ChatInput): Promise<string> {
-  const result = await chatFlow(input);
-  // The flow now returns an object with a text property
+  // Convert history to a string format for the prompt
+  const historyString = input.history
+    .map(msg => `${msg.role}: ${msg.content}`)
+    .join('\n');
+
+  const result = await chatFlow({
+    history: historyString,
+    message: input.message,
+  });
+  
   return result.text;
 }
 
 const chatPrompt = ai.definePrompt(
   {
     name: 'chatPrompt',
-    input: { schema: ChatInputSchema },
+    // Input schema is now a simple object with strings
+    input: { schema: z.object({
+        history: z.string(),
+        message: z.string(),
+    }) },
     output: { schema: z.object({ text: z.string() }) },
 
     system: `You are PrashikshanConnect AI, a helpful and friendly AI assistant integrated into the PrashikshanConnect platform.
@@ -38,21 +49,13 @@ Your tone should be professional, encouraging, and helpful. Always provide actio
 Do not go off-topic. All your responses should be relevant to the PrashikshanConnect platform and the user's career development or administrative tasks.
 Keep your answers concise and easy to understand.
 `,
-    // By defining the prompt as a function, we can dynamically build the payload.
-    prompt: (input) => {
-        // Correctly format history for the generate call
-        const history = input.history.map(msg => ({
-            role: msg.role,
-            content: [{ text: msg.content }],
-        }));
-        
-        // Return the full configuration object, including the model.
-        return {
-            history,
-            prompt: input.message,
-            model: googleAI.model('gemini-pro')
-        }
-    }
+    // Use a static Handlebars-style prompt string.
+    prompt: `Chat History:
+{{{history}}}
+
+New user message:
+user: {{{message}}}
+model:`,
   },
 );
 
@@ -61,11 +64,13 @@ Keep your answers concise and easy to understand.
 const chatFlow = ai.defineFlow(
   {
     name: 'chatFlow',
-    inputSchema: ChatInputSchema,
+    inputSchema: z.object({
+        history: z.string(),
+        message: z.string(),
+    }),
     outputSchema: z.object({ text: z.string() }),
   },
   async (input) => {
-    // Calling the prompt object will now work correctly.
     const { output } = await chatPrompt(input);
     return output || { text: "I'm sorry, I couldn't generate a response."};
   }

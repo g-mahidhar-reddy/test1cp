@@ -9,6 +9,7 @@
  */
 
 import { ai } from '@/ai/genkit';
+import { googleAI } from '@genkit-ai/google-genai';
 import { z } from 'genkit';
 import type { ChatInput, Message } from '@/lib/types';
 import { ChatInputSchema } from '@/lib/types';
@@ -29,7 +30,7 @@ const chatFlow = ai.defineFlow(
   async ({ history, message }) => {
     
     const response = await ai.generate({
-      model: 'gemini-1.5-flash-latest',
+      model: googleAI.model('gemini-1.5-flash-latest'),
       prompt: message,
       history: history.map(msg => ({
         role: msg.role,

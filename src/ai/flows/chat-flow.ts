@@ -30,7 +30,7 @@ const chatFlow = ai.defineFlow(
   async ({ history, message }) => {
     
     const response = await ai.generate({
-      model: googleAI.model('gemini-1.5-flash-latest'),
+      model: googleAI.model('gemini-pro'),
       prompt: message,
       history: history.map(msg => ({
         role: msg.role,

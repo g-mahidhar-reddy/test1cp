@@ -10,7 +10,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import type { ChatInput } from '@/lib/types';
+import type { ChatInput, Message } from '@/lib/types';
 import { ChatInputSchema } from '@/lib/types';
 
 

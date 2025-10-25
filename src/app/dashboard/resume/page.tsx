@@ -11,13 +11,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Upload, FileText, Download, Loader2, Sparkles } from 'lucide-react';
-import React, { useState, useEffect, useCallback, useTransition } from 'react';
+import { Upload, FileText, Download, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useFirebase, useFirestore } from '@/firebase/provider';
 import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
-import { parseResume } from '@/ai/flows/parse-resume-flow';
+import { extractSkillsFromResume } from '@/ai/flows/extract-skills-from-resume-flow';
 import { doc, setDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -71,21 +71,12 @@ export default function ResumePage() {
     }
   };
 
-  const fileToDataUri = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
   const handleUpload = async () => {
     if (!selectedFile || !user || !firestore) return;
 
     setIsLoading(true);
-    const resumeFolderRef = ref(storage, `resumes/${user.id}`);
     const userDocRef = doc(firestore, 'users', user.id);
+    const resumeFolderRef = ref(storage, `resumes/${user.id}`);
 
     try {
       // 1. Delete existing resumes if any
@@ -95,7 +86,8 @@ export default function ResumePage() {
       }
 
       // 2. Upload the new file
-      const resumeRef = ref(storage, `resumes/${user.id}/${selectedFile.name}`);
+      const filePath = `resumes/${user.id}/${selectedFile.name}`;
+      const resumeRef = ref(storage, filePath);
       await uploadBytes(resumeRef, selectedFile);
       
       toast({
@@ -103,13 +95,12 @@ export default function ResumePage() {
         description: "Now analyzing your resume to extract skills...",
       });
 
-      // 3. Analyze resume for skills
-      const dataUri = await fileToDataUri(selectedFile);
-      const parsedData = await parseResume({ resumeDataUri: dataUri });
-
+      // 3. Analyze resume for skills using the new server-side flow
+      const { skills: newSkillsList } = await extractSkillsFromResume({ filePath });
+      
       // 4. Update user profile with new skills
-      if (parsedData && parsedData.skills.length > 0) {
-        const newSkills = parsedData.skills.map(skill => ({ name: skill }));
+      if (newSkillsList && newSkillsList.length > 0) {
+        const newSkills = newSkillsList.map(skill => ({ name: skill }));
         
         const existingSkills = user.skills || [];
         const combinedSkills = [...existingSkills];
@@ -125,7 +116,7 @@ export default function ResumePage() {
         setUser(prev => prev ? { ...prev, skills: combinedSkills } : null);
         toast({
           title: "Skills Updated!",
-          description: `We've added ${parsedData.skills.length} skills from your resume to your profile.`,
+          description: `We've added ${newSkillsList.length} skills from your resume to your profile.`,
         });
       } else {
         toast({

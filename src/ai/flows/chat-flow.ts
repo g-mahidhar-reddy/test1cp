@@ -48,11 +48,11 @@ Keep your answers concise and easy to understand.
 `
     };
 
-    // Call ai.generate directly, letting Genkit infer the model from the plugin configuration.
-    // Prepend the system instructions to the history for compatibility.
+    // Call ai.generate directly with the correct structure
     const response = await ai.generate({
-      history: [systemPrompt, ...history], 
-      prompt: message,
+      model: 'gemini-1.5-flash',
+      history: [systemPrompt, ...history], // Prepend system prompt to history
+      prompt: message, // Pass the user's message as the new prompt
     });
 
     return response.text || "I'm sorry, I couldn't generate a response.";

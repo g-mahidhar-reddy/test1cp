@@ -34,15 +34,13 @@ Your tone should be professional, encouraging, and helpful. Always provide actio
 Do not go off-topic. All your responses should be relevant to the PrashikshanConnect platform and the user's career development or administrative tasks.
 Keep your answers concise and easy to understand.
 `,
-  },
-  async (input) => {
-    return {
-      history: input.history.map(msg => ({
-          role: msg.role,
-          content: [{ text: msg.content }],
-      })),
-      prompt: input.message,
-    };
+    prompt: (input) => ({
+        history: input.history.map(msg => ({
+            role: msg.role,
+            content: [{ text: msg.content }],
+        })),
+        prompt: input.message,
+    })
   }
 );
 

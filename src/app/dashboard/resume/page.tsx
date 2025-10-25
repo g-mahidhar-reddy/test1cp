@@ -27,8 +27,7 @@ export default function ResumePage() {
   const { firebaseApp } = useFirebase();
   const firestore = useFirestore();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isAnalyzing, startAnalyzing] = useTransition();
+  const [isLoading, setIsLoading] = useState(false);
   const [existingResume, setExistingResume] = useState<{ name: string; url: string } | null>(null);
   const { toast } = useToast();
   const storage = getStorage(firebaseApp);
@@ -80,100 +79,84 @@ export default function ResumePage() {
       reader.readAsDataURL(file);
     });
   };
-  
-  const analyzeAndupdateSkills = (file: File) => {
-     startAnalyzing(async () => {
-       if(!user || !firestore) return;
-
-       try {
-        const dataUri = await fileToDataUri(file);
-        const parsedData = await parseResume({ resumeDataUri: dataUri });
-
-        if (parsedData && parsedData.skills.length > 0) {
-          const userDocRef = doc(firestore, 'users', user.id);
-          const newSkills = parsedData.skills.map(skill => ({ name: skill }));
-          
-          // Merge with existing skills, avoiding duplicates
-          const existingSkills = user.skills || [];
-          const combinedSkills = [...existingSkills];
-          newSkills.forEach(newSkill => {
-              if (!existingSkills.some(existingSkill => existingSkill.name.toLowerCase() === newSkill.name.toLowerCase())) {
-                  combinedSkills.push(newSkill);
-              }
-          });
-          
-          const dataToSave = { skills: combinedSkills };
-          setDoc(userDocRef, dataToSave, { merge: true })
-            .then(() => {
-                setUser(prev => prev ? { ...prev, skills: combinedSkills } : null);
-                toast({
-                  title: "Skills Updated!",
-                  description: `We've added ${parsedData.skills.length} skills from your resume to your profile.`,
-                });
-            })
-            .catch((error) => {
-                const permissionError = new FirestorePermissionError({
-                  path: userDocRef.path,
-                  operation: 'update',
-                  requestResourceData: dataToSave,
-                });
-                errorEmitter.emit('permission-error', permissionError);
-            });
-
-        } else {
-          toast({
-            title: "Analysis Complete",
-            description: "We couldn't extract any new skills from your resume.",
-          });
-        }
-       } catch (error) {
-         console.error('Analysis failed:', error);
-         toast({
-          variant: "destructive",
-          title: "Analysis failed",
-          description: "There was a problem analyzing your resume. Please try again.",
-        });
-       }
-    });
-  }
 
   const handleUpload = async () => {
     if (!selectedFile || !user || !firestore) return;
 
-    setIsUploading(true);
+    setIsLoading(true);
     const resumeFolderRef = ref(storage, `resumes/${user.id}`);
-    
+    const userDocRef = doc(firestore, 'users', user.id);
+
     try {
-      // Delete existing resumes if any
+      // 1. Delete existing resumes if any
       const existingFiles = await listAll(resumeFolderRef);
       for (const itemRef of existingFiles.items) {
         await deleteObject(itemRef);
       }
 
-      // Upload the new file
+      // 2. Upload the new file
       const resumeRef = ref(storage, `resumes/${user.id}/${selectedFile.name}`);
       await uploadBytes(resumeRef, selectedFile);
       
       toast({
         title: "Resume Uploaded!",
-        description: "Now analyzing your resume to extract skills in the background...",
+        description: "Now analyzing your resume to extract skills...",
       });
+
+      // 3. Analyze resume for skills
+      const dataUri = await fileToDataUri(selectedFile);
+      const parsedData = await parseResume({ resumeDataUri: dataUri });
+
+      // 4. Update user profile with new skills
+      if (parsedData && parsedData.skills.length > 0) {
+        const newSkills = parsedData.skills.map(skill => ({ name: skill }));
+        
+        const existingSkills = user.skills || [];
+        const combinedSkills = [...existingSkills];
+        newSkills.forEach(newSkill => {
+            if (!existingSkills.some(existingSkill => existingSkill.name.toLowerCase() === newSkill.name.toLowerCase())) {
+                combinedSkills.push(newSkill);
+            }
+        });
+        
+        const dataToSave = { skills: combinedSkills };
+        await setDoc(userDocRef, dataToSave, { merge: true });
+
+        setUser(prev => prev ? { ...prev, skills: combinedSkills } : null);
+        toast({
+          title: "Skills Updated!",
+          description: `We've added ${parsedData.skills.length} skills from your resume to your profile.`,
+        });
+      } else {
+        toast({
+          title: "Analysis Complete",
+          description: "We couldn't extract any new skills from your resume.",
+        });
+      }
       
-      // Start analysis in the background
-      analyzeAndupdateSkills(selectedFile);
+      // 5. Refresh UI
+      await fetchExistingResume();
+      setSelectedFile(null);
 
-      await fetchExistingResume(); // Refresh the existing resume view
-      setSelectedFile(null); // Clear the file input
+    } catch (error: any) {
+      console.error('Upload and analysis failed:', error);
+       // This will catch both storage and firestore errors
+      const operation = error.code?.startsWith('storage/') ? 'create' : 'update';
+      const path = operation === 'create' ? `resumes/${user.id}/${selectedFile.name}` : userDocRef.path;
+      
+      const permissionError = new FirestorePermissionError({
+        path: path,
+        operation: operation,
+      });
+      errorEmitter.emit('permission-error', permissionError);
 
-    } catch (error) {
-      console.error('Upload failed:', error);
       toast({
         variant: "destructive",
         title: "Upload failed",
-        description: "There was a problem uploading your resume file. Please try again.",
+        description: "There was a problem processing your resume. Please check permissions and try again.",
       });
     } finally {
-      setIsUploading(false);
+      setIsLoading(false);
     }
   };
 
@@ -193,10 +176,10 @@ export default function ResumePage() {
                   <p className="font-medium truncate">{existingResume.name}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    {isAnalyzing && (
+                    {isLoading && (
                         <div className="flex items-center text-sm text-muted-foreground">
                             <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
-                            <span>Analyzing...</span>
+                            <span>Processing...</span>
                         </div>
                     )}
                     <Button variant="outline" size="icon" asChild>
@@ -209,10 +192,10 @@ export default function ResumePage() {
               </div>
             ) : (
               <div className="flex items-center justify-center rounded-lg border-2 border-dashed bg-muted/20 p-8">
-                 {isAnalyzing ? (
+                 {isLoading ? (
                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <Loader2 className="h-6 w-6 animate-spin" />
-                        <span>Analyzing your new resume...</span>
+                        <span>Processing your new resume...</span>
                      </div>
                  ) : (
                     <p className="text-sm text-muted-foreground">No resume uploaded yet.</p>
@@ -237,12 +220,10 @@ export default function ResumePage() {
             <div className="grid w-full max-w-sm items-center gap-1.5">
               <Label htmlFor="resume-upload">Resume (PDF only)</Label>
               <div className="flex w-full items-center space-x-2">
-                <Input id="resume-upload" type="file" accept=".pdf" onChange={handleFileChange} />
-                <Button onClick={handleUpload} disabled={!selectedFile || isUploading || isAnalyzing}>
-                  {isUploading ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Uploading...</>
-                  ) : isAnalyzing ? (
-                     <><Sparkles className="mr-2 h-4 w-4 animate-pulse"/> Analyzing...</>
+                <Input id="resume-upload" type="file" accept=".pdf" onChange={handleFileChange} disabled={isLoading} />
+                <Button onClick={handleUpload} disabled={!selectedFile || isLoading}>
+                  {isLoading ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Processing...</>
                   ) : (
                     <>
                       <Upload className="mr-2 h-4 w-4" />

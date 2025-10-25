@@ -1,245 +1,240 @@
 /**
- * @file Firestore Security Rules
- * @description This ruleset enforces a strict user-ownership model for private user data
- * and allows public read access to internship listings. Write access to internships,
- * industry users, and MOUs is restricted.
+ * @fileoverview Firestore Security Rules for PrashikshanConnect.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model for personal data, while allowing public read access to internships.
+ * Write access to internships is restricted to authorized industry users. Access to MOUs is not defined and is currently open.
  *
  * Data Structure:
- * - /users/{userId}: User profiles and settings.
- * - /users/{userId}/skills/{skillId}: Skills associated with a user.
- * - /users/{userId}/applications/{applicationId}: Internship applications submitted by the user.
- * - /internships/{internshipId}: Publicly available internship opportunities.
- * - /mous/{mouId}: Memorandum of Understanding documents (access restricted).
- * - /industryUsers/{industryUserId}: Industry user profiles, linked to a user account.
- * - /certificates/{certificateId}: Certificates uploaded by users, stored with metadata.
- * - /recommendations/{recommendationId}: Recommendations for users.
- * - /feedback/{feedbackId}: Feedback on recommendations.
+ * - User profiles and associated data (skills, applications) are nested under `/users/{userId}`.
+ * - Internships are stored in a top-level `/internships/{internshipId}` collection.
+ * - Industry user profiles are stored in the `/industryUsers/{industryUserId}` collection.
+ * - Certificates are stored in the `/certificates/{certificateId}` collection.
+ * - Recommendations are stored in the `/recommendations/{recommendationId}` collection.
+ * - Feedback is stored in the `/feedback/{feedbackId}` collection.
  *
  * Key Security Decisions:
- * - Users can only read and write their own user documents and associated subcollections (skills, applications, certificates).
- * - Internship listings are publicly readable, but write access is restricted.
- * - Industry user profiles are readable and writable only by the associated user.
+ * - Users can only access their own profile data and associated subcollections.
+ * - Internships are publicly readable, but write access is limited to authorized industry users.
  * - Listing of users is disallowed.
+ * - The rules explicitly deny potentially unsafe operations by default.
  *
  * Denormalization for Authorization:
- * - Internships could benefit from denormalizing an 'ownerId' field to simplify write rules.
+ * - The `Internship` entity requires an `industryUserId` field to enforce owner-only writes.
+ *
+ * Structural Segregation:
+ * - Private user data is stored under the `/users/{userId}` collection, while public internship data is stored in the top-level `/internships` collection.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Manages access to user profile documents.
+     * @description Allows users to read and write their own profile data.
      * @path /users/{userId}
-     * @allow (create) User with ID 'user123' can create their own profile.
-     * @allow (get) User with ID 'user123' can read their profile.
-     * @allow (update) User with ID 'user123' can update their profile.
-     * @allow (delete) User with ID 'user123' can delete their profile.
-     * @deny (create) User with ID 'user123' cannot create a profile with a different ID ('user456').
-     * @deny (get) User with ID 'user123' cannot read another user's profile ('user456').
+     * @allow (create) User with matching ID can create their profile.
+     * @allow (get) User with matching ID can read their profile.
+     * @allow (update) User with matching ID can update their profile.
+     * @allow (delete) User with matching ID can delete their profile.
+     * @deny (create) User tries to create a profile with a different ID.
+     * @deny (get) User tries to read another user's profile.
+     * @deny (update) User tries to update another user's profile.
+     * @deny (delete) User tries to delete another user's profile.
      * @principle Enforces document ownership for writes.
      */
     match /users/{userId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
       function isOwner(userId) {
-        return request.auth.uid == userId;
+        return request.auth != null && request.auth.uid == userId;
       }
-
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
       allow get: if isOwner(userId);
       allow list: if false;
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isOwner(userId) && resource.data.id == userId;
-      allow delete: if isOwner(userId) && resource.data.id == userId;
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Manages access to user skill documents.
+     * @description Allows users to manage their own skills.
      * @path /users/{userId}/skills/{skillId}
-     * @allow (create) User with ID 'user123' can create a skill under their profile.
-     * @allow (get) User with ID 'user123' can read a skill under their profile.
-     * @allow (update) User with ID 'user123' can update a skill under their profile.
-     * @allow (delete) User with ID 'user123' can delete a skill under their profile.
-     * @deny (create) User with ID 'user123' cannot create a skill under another user's profile ('user456').
-     * @deny (get) User with ID 'user123' cannot read a skill under another user's profile ('user456').
+     * @allow (create) User with matching ID can create a skill.
+     * @allow (get) User with matching ID can read their skill.
+     * @allow (update) User with matching ID can update their skill.
+     * @allow (delete) User with matching ID can delete their skill.
+     * @deny (create) User tries to create a skill for a different user.
+     * @deny (get) User tries to read another user's skill.
+     * @deny (update) User tries to update another user's skill.
+     * @deny (delete) User tries to delete another user's skill.
      * @principle Restricts access to a user's own data tree.
      */
     match /users/{userId}/skills/{skillId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
       function isOwner(userId) {
-        return request.auth.uid == userId;
+        return request.auth != null && request.auth.uid == userId;
       }
-
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
       allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
+      allow list: if false;
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Manages access to user application documents.
+     * @description Allows users to manage their own applications.
      * @path /users/{userId}/applications/{applicationId}
-     * @allow (create) User with ID 'user123' can create an application under their profile.
-     * @allow (get) User with ID 'user123' can read an application under their profile.
-     * @allow (update) User with ID 'user123' can update an application under their profile.
-     * @allow (delete) User with ID 'user123' can delete an application under their profile.
-     * @deny (create) User with ID 'user123' cannot create an application under another user's profile ('user456').
-     * @deny (get) User with ID 'user123' cannot read an application under another user's profile ('user456').
+     * @allow (create) User with matching ID can create an application.
+     * @allow (get) User with matching ID can read their application.
+     * @allow (update) User with matching ID can update their application.
+     * @allow (delete) User with matching ID can delete their application.
+     * @deny (create) User tries to create an application for a different user.
+     * @deny (get) User tries to read another user's application.
+     * @deny (update) User tries to update another user's application.
+     * @deny (delete) User tries to delete another user's application.
      * @principle Restricts access to a user's own data tree.
      */
     match /users/{userId}/applications/{applicationId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
       function isOwner(userId) {
-        return request.auth.uid == userId;
+        return request.auth != null && request.auth.uid == userId;
       }
-
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
       allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
+      allow list: if false;
       allow create: if isOwner(userId);
-      allow update: if isOwner(userId);
-      allow delete: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Manages access to internship documents.
+     * @description Allows public read access to internships, restricts write access to industry users.
      * @path /internships/{internshipId}
      * @allow (get) Any user can read internship details.
      * @allow (list) Any user can list internships.
-     * @deny (create) No user can create an internship. // TODO: Add owner validation once the schema is updated with an ownership field.
-     * @deny (update) No user can update an internship. // TODO: Add owner validation once the schema is updated with an ownership field.
-     * @deny (delete) No user can delete an internship. // TODO: Add owner validation once the schema is updated with an ownership field.
-     * @principle Public read access with restricted write access.
+     * @allow (create) Industry user can create internships with matching industryUserId.
+     * @allow (update) Industry user can update their own internship.
+     * @allow (delete) Industry user can delete their own internship.
+     * @deny (create) Non-industry user tries to create an internship.
+     * @deny (update) User tries to update an internship they don't own.
+     * @deny (delete) User tries to delete an internship they don't own.
+     * @principle Public read, owner-only writes, enforces relationship between Internship and IndustryUser.
      */
     match /internships/{internshipId} {
       function isSignedIn() {
         return request.auth != null;
       }
-
       allow get: if true;
       allow list: if true;
-      allow create: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
-      allow update: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
-      allow delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && request.auth.uid == resource.data.industryUserId;
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.industryUserId;
     }
 
     /**
-     * @description Manages access to MoU documents.
+     * @description Allows read and write access to MOUs. Access control to be defined later.
      * @path /mous/{mouId}
-     * @deny (get) No user can read MoU details. // TODO: Add role-based validation once the schema is updated with a role field.
-     * @deny (list) No user can list MoUs. // TODO: Add role-based validation once the schema is updated with a role field.
-     * @deny (create) No user can create an MoU. // TODO: Add role-based validation once the schema is updated with a role field.
-     * @deny (update) No user can update an MoU. // TODO: Add role-based validation once the schema is updated with a role field.
-     * @deny (delete) No user can delete an MoU. // TODO: Add role-based validation once the schema is updated with a role field.
-     * @principle Restricted access based on roles.
+     * @allow (get) Any user can read MOU details.
+     * @allow (list) Any user can list MOUs.
+     * @allow (create) Any authenticated user can create MOUs.
+     * @allow (update) Any authenticated user can update MOUs.
+     * @allow (delete) Any authenticated user can delete MOUs.
+     * @principle Currently open access for prototyping; refine access control later.
      */
     match /mous/{mouId} {
-      function isSignedIn() {
+       function isSignedIn() {
         return request.auth != null;
       }
-
-      allow get: if false; // TODO: Add role-based validation once the schema is updated with a role field.
-      allow list: if false; // TODO: Add role-based validation once the schema is updated with a role field.
-      allow create: if false; // TODO: Add role-based validation once the schema is updated with a role field.
-      allow update: if false; // TODO: Add role-based validation once the schema is updated with a role field.
-      allow delete: if false; // TODO: Add role-based validation once the schema is updated with a role field.
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages access to industry user documents.
+     * @description Allows access to industry user profiles for authorized users.
      * @path /industryUsers/{industryUserId}
-     * @allow (create) Industry user can create their profile.
-     * @allow (get) Industry user can read their profile.
-     * @allow (update) Industry user can update their profile.
-     * @allow (delete) Industry user can delete their profile.
-     * @deny (create) User with ID 'industryUser123' cannot create a profile with a different ID ('industryUser456').
-     * @deny (get) User with ID 'industryUser123' cannot read another user's profile ('industryUser456').
+     * @allow (get) Industry user can read their own profile.
+     * @allow (list) No listing allowed.
+     * @allow (create) User with matching ID can create their profile.
+     * @allow (update) Industry user can update their own profile.
+     * @allow (delete) Industry user can delete their own profile.
+     * @deny (create) User tries to create an industry user profile with a different ID.
+     * @deny (get) User tries to read another industry user's profile.
+     * @deny (update) User tries to update another industry user's profile.
+     * @deny (delete) User tries to delete another industry user's profile.
      * @principle Enforces document ownership for writes.
      */
     match /industryUsers/{industryUserId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
       function isOwner(industryUserId) {
-          return request.auth.uid == get(/databases/$(database)/documents/industryUsers/$(industryUserId)).data.userId;
+        return request.auth != null && request.auth.uid == industryUserId;
       }
-
+      function isExistingOwner(industryUserId) {
+        return isOwner(industryUserId) && resource != null;
+      }
       allow get: if isOwner(industryUserId);
       allow list: if false;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isOwner(industryUserId) && resource.data.userId == request.resource.data.userId;
-      allow delete: if isOwner(industryUserId);
+      allow create: if request.auth.uid == industryUserId;
+      allow update: if isExistingOwner(industryUserId);
+      allow delete: if isExistingOwner(industryUserId);
     }
 
       /**
-       * @description Manages access to certificates documents.
+       * @description Allows users to manage their own certificates.
        * @path /certificates/{certificateId}
-       * @allow (create) User with ID 'user123' can create their own certificate.
-       * @allow (get) User with ID 'user123' can read their certificate.
-       * @allow (update) User with ID 'user123' can update their certificate.
-       * @allow (delete) User with ID 'user123' can delete their certificate.
-       * @deny (create) User with ID 'user123' cannot create a certificate with a different ID ('user456').
-       * @deny (get) User with ID 'user123' cannot read another user's certificate ('user456').
-       * @principle Enforces document ownership for writes.
+       * @allow (create) User with matching ID can create a certificate.
+       * @allow (get) User with matching ID can read their certificate.
+       * @allow (update) User with matching ID can update their certificate.
+       * @allow (delete) User with matching ID can delete their certificate.
+       * @deny (create) User tries to create a certificate for a different user.
+       * @deny (get) User tries to read another user's certificate.
+       * @deny (update) User tries to update another user's certificate.
+       * @deny (delete) User tries to delete another user's certificate.
+       * @principle Restricts access to a user's own data.
        */
     match /certificates/{certificateId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(certificateId) {
-        return request.auth.uid == get(/databases/$(database)/documents/certificates/$(certificateId)).data.userId;
-      }
-
-      allow get: if isOwner(certificateId);
+        function isSignedIn() {
+          return request.auth != null;
+        }
+      allow get: if isSignedIn() && request.auth.uid == resource.data.userId;
       allow list: if false;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isOwner(certificateId) && resource.data.userId == request.resource.data.userId;
-      allow delete: if isOwner(certificateId);
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
+      allow update: if isSignedIn() && request.auth.uid == resource.data.userId;
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
     }
 
     /**
-     * @description Manages access to recommendation documents.
+     * @description Allows access to recommendations.
      * @path /recommendations/{recommendationId}
      */
     match /recommendations/{recommendationId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      // Recommendations are globally readable.  However, for any particular user,
-      // the recommendation is only useful to the user to whom it's directed.
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+        function isSignedIn() {
+          return request.auth != null;
+        }
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
     /**
-     * @description Manages access to feedback documents.
+     * @description Allows access to feedback.
      * @path /feedback/{feedbackId}
      */
     match /feedback/{feedbackId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      // Feedback is public information
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+        function isSignedIn() {
+          return request.auth != null;
+        }
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
   }
 }

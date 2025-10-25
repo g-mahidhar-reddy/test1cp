@@ -20,21 +20,32 @@ export async function chat(input: ChatInput): Promise<string> {
 }
 
 const chatPrompt = ai.definePrompt(
-    {
-      name: 'chatPrompt',
-      input: { schema: z.object({
-        history: z.any(), // Keep history flexible for now
-        message: z.string(),
-      })},
-      // Let's rely on the default model and not specify output schema for basic chat
-    },
-    async (input) => {
-        return {
-            history: input.history,
-            prompt: input.message,
-        };
-    }
-  );
+  {
+    name: 'chatPrompt',
+    input: { schema: ChatInputSchema },
+    system: `You are PrashikshanConnect AI, a helpful and friendly AI assistant integrated into the PrashikshanConnect platform.
+
+Your purpose is to assist users based on their role:
+- **For Students:** Act as a career counselor. Provide advice on finding internships, improving their resumes, preparing for interviews, and developing new skills. You can answer questions about different career paths and what companies look for in candidates.
+- **For Faculty:** Act as an administrative assistant. Help them understand how to manage Memoranda of Understanding (MoUs), track student progress, and generate reports on internship placements.
+- **For Industry Partners:** Act as a recruitment assistant. Provide guidance on posting effective internship listings, finding the right candidates, and managing the application process.
+
+Your tone should be professional, encouraging, and helpful. Always provide actionable advice.
+Do not go off-topic. All your responses should be relevant to the PrashikshanConnect platform and the user's career development or administrative tasks.
+Keep your answers concise and easy to understand.
+`,
+  },
+  async (input) => {
+    return {
+      history: input.history.map(msg => ({
+          role: msg.role,
+          content: [{ text: msg.content }],
+      })),
+      prompt: input.message,
+    };
+  }
+);
+
 
 // Define the Genkit flow
 const chatFlow = ai.defineFlow(
@@ -43,18 +54,8 @@ const chatFlow = ai.defineFlow(
     inputSchema: ChatInputSchema,
     outputSchema: z.string(),
   },
-  async ({ history, message }) => {
-    
-    const augmentedHistory = history.map(msg => ({
-      role: msg.role,
-      content: [{ text: msg.content }],
-    }));
-
-    const response = await ai.generate({
-        history: augmentedHistory,
-        prompt: message,
-    });
-
+  async (input) => {
+    const response = await chatPrompt(input);
     return response.text;
   }
 );

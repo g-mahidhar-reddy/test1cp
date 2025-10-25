@@ -34,7 +34,7 @@ const chatFlow = ai.defineFlow(
   async ({ history, message }) => {
     // Call ai.generate directly with the correct structure
     const response = await ai.generate({
-      model: googleAI.model('gemini-1.5-flash-latest'),
+      model: 'gemini-pro',
       system: `You are PrashikshanConnect AI, a helpful and friendly AI assistant integrated into the PrashikshanConnect platform.
 
 Your purpose is to assist users based on their role:

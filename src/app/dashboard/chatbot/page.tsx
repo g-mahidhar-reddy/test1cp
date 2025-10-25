@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { chat, type ChatInput, type Message } from '@/ai/flows/chat-flow';
+import { chat } from '@/ai/flows/chat-flow';
+import type { ChatInput, Message } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -57,8 +58,7 @@ export default function ChatbotPage() {
         title: "Uh oh! Something went wrong.",
         description: "There was a problem communicating with the chatbot. Please try again.",
       });
-       // Restore user message if bot fails
-      setMessages(prev => prev.slice(0, -1));
+       // Do not restore user message on failure, as it's confusing. The error toast is enough.
     } finally {
       setIsPending(false);
     }

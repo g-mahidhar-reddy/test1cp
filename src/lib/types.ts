@@ -1,5 +1,7 @@
 
 
+import { z } from 'zod';
+
 export type UserRole = 'student' | 'faculty' | 'industry';
 
 export interface User {
@@ -95,4 +97,17 @@ export interface Feedback {
     rating?: number; // e.g., 1-5
     comment?: string;
 }
+
+// Zod schemas for AI flows
+export const MessageSchema = z.object({
+  role: z.enum(['user', 'model']),
+  content: z.string(),
+});
+export type Message = z.infer<typeof MessageSchema>;
+
+export const ChatInputSchema = z.object({
+  history: z.array(MessageSchema).describe('The chat history.'),
+  message: z.string().describe('The user\'s latest message.'),
+});
+export type ChatInput = z.infer<typeof ChatInputSchema>;
     

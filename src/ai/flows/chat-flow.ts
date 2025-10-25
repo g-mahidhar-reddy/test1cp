@@ -10,20 +10,9 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import type { ChatInput, Message } from '@/lib/types';
+import { ChatInputSchema } from '@/lib/types';
 
-// Define schemas for chat history
-export const MessageSchema = z.object({
-  role: z.enum(['user', 'model']),
-  content: z.string(),
-});
-export type Message = z.infer<typeof MessageSchema>;
-
-export const ChatInputSchema = z.object({
-  history: z.array(MessageSchema).describe('The chat history.'),
-  message: z.string().describe('The user\'s latest message.'),
-});
-
-export type ChatInput = z.infer<typeof ChatInputSchema>;
 
 // The main exported function to be called from the UI
 export async function chat(input: ChatInput): Promise<string> {

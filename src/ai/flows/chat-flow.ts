@@ -11,7 +11,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import type { ChatInput, Message } from '@/lib/types';
-import { ChatInputSchema, MessageSchema } from '@/lib/types';
+import { ChatInputSchema } from '@/lib/types';
 import { googleAI } from '@genkit-ai/google-genai';
 
 // The main exported function to be called from the UI
@@ -33,6 +33,7 @@ const chatFlow = ai.defineFlow(
   },
   async ({ history, message }) => {
     // Call ai.generate directly with the correct structure
+    // Let Genkit infer the model from the plugin configuration.
     const response = await ai.generate({
       model: googleAI.model('gemini-pro'),
       system: `You are PrashikshanConnect AI, a helpful and friendly AI assistant integrated into the PrashikshanConnect platform.

@@ -10,15 +10,31 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import type { ChatInput, Message } from '@/lib/types';
+import type { ChatInput } from '@/lib/types';
 import { ChatInputSchema } from '@/lib/types';
-import {type GenerateRequestHistoryPart} from '@genkit-ai/google-genai';
 
 
 // The main exported function to be called from the UI
 export async function chat(input: ChatInput): Promise<string> {
   return chatFlow(input);
 }
+
+const chatPrompt = ai.definePrompt(
+    {
+      name: 'chatPrompt',
+      input: { schema: z.object({
+        history: z.any(), // Keep history flexible for now
+        message: z.string(),
+      })},
+      output: { schema: z.string() },
+    },
+    async (input) => {
+        return {
+            history: input.history,
+            prompt: input.message,
+        };
+    }
+  );
 
 // Define the Genkit flow
 const chatFlow = ai.defineFlow(
@@ -29,14 +45,14 @@ const chatFlow = ai.defineFlow(
   },
   async ({ history, message }) => {
     
-    const augmentedHistory: GenerateRequestHistoryPart[] = history.map(msg => ({
+    const augmentedHistory = history.map(msg => ({
       role: msg.role,
       content: [{ text: msg.content }],
     }));
 
     const response = await ai.generate({
-      history: augmentedHistory,
-      prompt: message,
+        history: augmentedHistory,
+        prompt: message,
     });
 
     return response.text;

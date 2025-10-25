@@ -27,20 +27,19 @@ const chatFlow = ai.defineFlow(
     outputSchema: z.string(),
   },
   async ({ history, message }) => {
-
-    const llm = ai.getModel('gemini-1.5-flash-latest');
     
     const augmentedHistory = history.map(msg => ({
       role: msg.role,
       content: [{ text: msg.content }],
     }));
 
-    const response = await llm.generate({
+    const response = await ai.generate({
+      model: 'gemini-1.5-flash-latest',
       // @ts-ignore - The history type from the SDK has a different structure
       history: augmentedHistory,
       prompt: message,
     });
 
-    return response.text();
+    return response.text;
   }
 );

@@ -17,6 +17,7 @@ import { ChatInputSchema } from '@/lib/types';
 // The main exported function to be called from the UI
 export async function chat(input: ChatInput): Promise<string> {
   const result = await chatFlow(input);
+  // The flow now returns an object with a text property
   return result.text;
 }
 
@@ -37,12 +38,15 @@ Your tone should be professional, encouraging, and helpful. Always provide actio
 Do not go off-topic. All your responses should be relevant to the PrashikshanConnect platform and the user's career development or administrative tasks.
 Keep your answers concise and easy to understand.
 `,
+    // By defining the prompt as a function, we can dynamically build the payload.
     prompt: (input) => {
+        // Correctly format history for the generate call
         const history = input.history.map(msg => ({
             role: msg.role,
             content: [{ text: msg.content }],
         }));
         
+        // Return the full configuration object, including the model.
         return {
             history,
             prompt: input.message,
@@ -61,6 +65,7 @@ const chatFlow = ai.defineFlow(
     outputSchema: z.object({ text: z.string() }),
   },
   async (input) => {
+    // Calling the prompt object will now work correctly.
     const { output } = await chatPrompt(input);
     return output || { text: "I'm sorry, I couldn't generate a response."};
   }

@@ -166,8 +166,8 @@ ${certsText}
             portfolioUrl: editableProfile.portfolioUrl || 'Not Provided',
             college: editableProfile.college,
             branch: editableProfile.branch,
-            semester: editableProfile.semester,
-            gpa: editableProfile.gpa,
+            semester: Number(editableProfile.semester) || undefined,
+            gpa: Number(editableProfile.gpa) || undefined,
             skills: editableProfile.skills,
             certifications: editableProfile.certifications,
         };
@@ -273,7 +273,11 @@ ${certsText}
 
     setIsSaving(true);
     const userDocRef = doc(firestore, 'users', user.id);
-    const dataToSave = { ...editableProfile };
+    const dataToSave = { ...editableProfile,
+      // Ensure numeric fields are saved as numbers
+      gpa: Number(editableProfile.gpa) || 0,
+      semester: Number(editableProfile.semester) || 0,
+    };
 
     try {
       await setDoc(userDocRef, dataToSave, { merge: true });
@@ -340,12 +344,32 @@ ${certsText}
                         <Input id="linkedinUrl" value={editableProfile.linkedinUrl || ''} onChange={handleProfileChange} />
                     </div>
                 </div>
+                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="grid gap-2">
+                        <Label htmlFor="college">College</Label>
+                        <Input id="college" value={editableProfile.college || ''} onChange={handleProfileChange} />
+                    </div>
+                     <div className="grid gap-2">
+                        <Label htmlFor="branch">Branch</Label>
+                        <Input id="branch" value={editableProfile.branch || ''} onChange={handleProfileChange} />
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="grid gap-2">
+                        <Label htmlFor="semester">Semester</Label>
+                        <Input id="semester" type="number" value={editableProfile.semester || ''} onChange={handleProfileChange} />
+                    </div>
+                     <div className="grid gap-2">
+                        <Label htmlFor="gpa">GPA</Label>
+                        <Input id="gpa" type="number" step="0.1" value={editableProfile.gpa || ''} onChange={handleProfileChange} />
+                    </div>
+                </div>
                 <div className="grid gap-2">
                     <Label>Raw Markdown Editor</Label>
                     <Textarea
                         value={resumeMarkdown}
                         onChange={(e) => setResumeMarkdown(e.target.value)}
-                        className="h-[calc(100vh-34rem)] min-h-[400px] font-mono text-sm"
+                        className="h-[calc(100vh-42rem)] min-h-[300px] font-mono text-sm"
                         placeholder="Your resume in Markdown..."
                     />
                 </div>
@@ -406,3 +430,5 @@ ${certsText}
     </div>
   );
 }
+
+    

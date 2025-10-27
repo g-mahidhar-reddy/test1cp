@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Copy, Check, FilePen, Wand2, Download, File, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Copy, Check, FilePen, Wand2, Download, File, Image as ImageIcon, FileText } from 'lucide-react';
 import React, { useState, useTransition, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';

@@ -8,259 +8,147 @@ import {
   CardFooter,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { Upload, FileText, Download, Loader2 } from 'lucide-react';
-import React, { useState, useEffect, useCallback } from 'react';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2, Sparkles, Copy, Check } from 'lucide-react';
+import React, { useState, useTransition, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { useFirebase, useFirestore } from '@/firebase/provider';
-import { getStorage, ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
-import { extractSkillsFromResume } from '@/ai/flows/extract-skills-from-resume-flow';
-import { doc, setDoc } from 'firebase/firestore';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { generateResume, type GenerateResumeInput } from '@/ai/flows/generate-resume-flow';
 
 export default function ResumePage() {
-  const { user, setUser } = useAuth();
-  const { firebaseApp } = useFirebase();
-  const firestore = useFirestore();
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [existingResume, setExistingResume] = useState<{ name: string; url: string } | null>(null);
+  const { user } = useAuth();
+  const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
-  const storage = getStorage(firebaseApp);
+  const [generatedResume, setGeneratedResume] = useState('');
+  const [hasCopied, setHasCopied] = useState(false);
 
-  const fetchExistingResume = useCallback(async () => {
-    if (!user) return;
-    const resumeFolderRef = ref(storage, `resumes/${user.id}`);
-    try {
-      const res = await listAll(resumeFolderRef);
-      if (res.items.length > 0) {
-        const firstItem = res.items[0];
-        const url = await getDownloadURL(firstItem);
-        setExistingResume({ name: firstItem.name, url });
-      } else {
-        setExistingResume(null);
-      }
-    } catch (error) {
-      console.error('Error fetching existing resume:', error);
-      setExistingResume(null);
+  const profileForResume = useMemo(() => {
+    if (!user) return null;
+    return {
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      linkedinUrl: user.linkedinUrl,
+      portfolioUrl: user.portfolioUrl,
+      college: user.college,
+      branch: user.branch,
+      semester: user.semester,
+      gpa: user.gpa,
+      skills: user.skills,
+      certifications: user.certifications,
+    };
+  }, [user]);
+
+  const handleGenerateResume = () => {
+    if (!profileForResume) {
+      toast({
+        variant: 'destructive',
+        title: 'Profile not loaded',
+        description: 'Your profile data is not available yet. Please wait and try again.',
+      });
+      return;
     }
-  }, [user, storage]);
 
-  useEffect(() => {
-    if (user) {
-      fetchExistingResume();
-    }
-  }, [user, fetchExistingResume]);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      if (e.target.files[0].type === 'application/pdf') {
-        setSelectedFile(e.target.files[0]);
-      } else {
+    startTransition(async () => {
+      setGeneratedResume('');
+      try {
+        const input: GenerateResumeInput = {
+          profile: profileForResume,
+        };
+        const result = await generateResume(input);
+        setGeneratedResume(result.resumeMarkdown);
+        toast({
+          title: 'Resume Generated!',
+          description: 'Your new resume is ready below.',
+        });
+      } catch (error) {
+        console.error('Failed to generate resume:', error);
         toast({
           variant: 'destructive',
-          title: 'Invalid File Type',
-          description: 'Please upload a PDF file.',
+          title: 'Uh oh! Something went wrong.',
+          description: 'There was a problem generating your resume. Please try again.',
         });
-        setSelectedFile(null);
       }
-    }
+    });
   };
-
-  const handleUpload = async () => {
-    if (!selectedFile || !user || !firestore) return;
-
-    setIsLoading(true);
-    const userDocRef = doc(firestore, 'users', user.id);
-    const filePath = `resumes/${user.id}/${selectedFile.name}`;
-    const resumeRef = ref(storage, filePath);
-    const resumeFolderRef = ref(storage, `resumes/${user.id}`);
-
-
-    try {
-      // 1. Delete existing resumes if any
-      const existingFiles = await listAll(resumeFolderRef);
-      for (const itemRef of existingFiles.items) {
-        await deleteObject(itemRef);
-      }
-
-      // 2. Upload the new file
-      await uploadBytes(resumeRef, selectedFile);
-      
-      toast({
-        title: "Resume Uploaded!",
-        description: "Now analyzing your resume to extract skills...",
-      });
-
-      // 3. Analyze resume for skills using the new server-side flow
-      const { skills: newSkillsList } = await extractSkillsFromResume({ filePath });
-      
-      // 4. Update user profile with new skills
-      if (newSkillsList && newSkillsList.length > 0) {
-        const newSkills = newSkillsList.map(skill => ({ name: skill }));
-        
-        const existingSkills = user.skills || [];
-        const combinedSkills = [...existingSkills];
-        newSkills.forEach(newSkill => {
-            if (!existingSkills.some(existingSkill => existingSkill.name.toLowerCase() === newSkill.name.toLowerCase())) {
-                combinedSkills.push(newSkill);
-            }
-        });
-        
-        const dataToSave = { skills: combinedSkills };
-        await setDoc(userDocRef, dataToSave, { merge: true });
-
-        setUser(prev => prev ? { ...prev, skills: combinedSkills } : null);
-        toast({
-          title: "Skills Updated!",
-          description: `We've added ${newSkillsList.length} skills from your resume to your profile.`,
-        });
-      } else {
-        toast({
-          title: "Analysis Complete",
-          description: "We couldn't extract any new skills from your resume.",
-        });
-      }
-      
-      // 5. Refresh UI
-      await fetchExistingResume();
-      setSelectedFile(null);
-
-    } catch (error: any) {
-        const isStorageError = error.code && error.code.startsWith('storage/');
-        let permissionError;
-
-        if (isStorageError) {
-            // Handle Storage permission error
-            permissionError = new FirestorePermissionError({
-                path: filePath, // Storage path
-                operation: 'create',
-            });
-        } else {
-            // Handle Firestore permission error (or other errors)
-            permissionError = new FirestorePermissionError({
-                path: userDocRef.path, // Firestore path
-                operation: 'update',
-            });
-        }
-        
-        errorEmitter.emit('permission-error', permissionError);
-
-        toast({
-            variant: "destructive",
-            title: "Upload failed",
-            description: "There was a problem processing your resume. Please check permissions and try again.",
-        });
-    } finally {
-      setIsLoading(false);
-    }
+  
+   const handleCopyToClipboard = () => {
+    navigator.clipboard.writeText(generatedResume).then(() => {
+      setHasCopied(true);
+      toast({ title: "Copied to clipboard!" });
+      setTimeout(() => setHasCopied(false), 2000);
+    });
   };
 
   return (
     <div className="grid auto-rows-max items-start gap-4 lg:gap-8">
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Existing Resume</CardTitle>
-            <CardDescription>Manage your currently uploaded resume.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {existingResume ? (
-              <div className="flex items-center justify-between rounded-lg border bg-muted/50 p-4">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-6 w-6 text-muted-foreground" />
-                  <p className="font-medium truncate">{existingResume.name}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    {isLoading && (
-                        <div className="flex items-center text-sm text-muted-foreground">
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
-                            <span>Processing...</span>
-                        </div>
-                    )}
-                    <Button variant="outline" size="icon" asChild>
-                    <a href={existingResume.url} target="_blank" rel="noopener noreferrer">
-                        <Download className="h-4 w-4" />
-                        <span className="sr-only">Download Resume</span>
-                    </a>
-                    </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center rounded-lg border-2 border-dashed bg-muted/20 p-8">
-                 {isLoading ? (
-                     <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                        <Loader2 className="h-6 w-6 animate-spin" />
-                        <span>Processing your new resume...</span>
-                     </div>
-                 ) : (
-                    <p className="text-sm text-muted-foreground">No resume uploaded yet.</p>
-                 )}
-              </div>
-            )}
-          </CardContent>
-          <CardFooter className="border-t px-6 py-4">
-            <p className="text-xs text-muted-foreground">
-              Your resume is securely stored and only shared with companies you apply to.
-            </p>
-          </CardFooter>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Upload New Resume</CardTitle>
-            <CardDescription>
-              Replace your current resume by uploading a new PDF file. This will also update your skills.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid w-full max-w-sm items-center gap-1.5">
-              <Label htmlFor="resume-upload">Resume (PDF only)</Label>
-              <div className="flex w-full items-center space-x-2">
-                <Input id="resume-upload" type="file" accept=".pdf" onChange={handleFileChange} disabled={isLoading} />
-                <Button onClick={handleUpload} disabled={!selectedFile || isLoading}>
-                  {isLoading ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Processing...</>
-                  ) : (
-                    <>
-                      <Upload className="mr-2 h-4 w-4" />
-                      Upload & Analyze
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter className="border-t px-6 py-4">
-            <p className="text-xs text-muted-foreground">Max file size: 5MB.</p>
-          </CardFooter>
-        </Card>
-      </div>
-
-      <Separator />
-
       <Card>
         <CardHeader>
           <CardTitle>Create Resume from Profile</CardTitle>
           <CardDescription>
-            Generate a new resume using the information from your profile. Keep
-            your profile updated for the best results.
+            Generate a professional resume using the information from your profile. Keep
+            your profile updated in the Settings page for the best results.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Click the button below to generate a standardized resume based on
-            your skills, experiences, and academic achievements listed in your
-            profile.
+            Click the button below to have our AI assistant generate a
+            standardized, well-formatted resume based on your skills,
+            experiences, and academic achievements.
           </p>
         </CardContent>
         <CardFooter className="border-t px-6 py-4">
-          <Button disabled>Generate Resume (Coming Soon)</Button>
+          <Button onClick={handleGenerateResume} disabled={isPending || !user}>
+            {isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Generate AI Resume
+              </>
+            )}
+          </Button>
         </CardFooter>
       </Card>
+      
+      {(isPending || generatedResume) && (
+        <Card>
+            <CardHeader>
+                <CardTitle>Your Generated Resume</CardTitle>
+                <CardDescription>
+                    Here is the resume generated by our AI assistant, in Markdown format. You can copy it and use it anywhere.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                {isPending ? (
+                    <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 py-20 text-center min-h-[300px]">
+                        <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+                        <p className="text-muted-foreground font-semibold">Our AI is crafting your resume...</p>
+                    </div>
+                ) : (
+                    <div className="relative">
+                        <Textarea
+                            readOnly
+                            value={generatedResume}
+                            className="h-96 font-mono text-sm"
+                            placeholder="Your generated resume will appear here..."
+                        />
+                         <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="absolute top-2 right-2"
+                            onClick={handleCopyToClipboard}
+                            >
+                           {hasCopied ? <Check className="h-4 w-4 text-green-500"/> : <Copy className="h-4 w-4"/>}
+                        </Button>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

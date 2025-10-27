@@ -13,7 +13,8 @@ import { Loader2, Sparkles, Copy, Check } from 'lucide-react';
 import React, { useState, useTransition, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
-import { generateResume, type GenerateResumeInput } from '@/ai/flows/generate-resume-flow';
+import { generateResume } from '@/ai/flows/generate-resume-flow';
+import type { GenerateResumeInput } from '@/lib/resume-types';
 
 export default function ResumePage() {
   const { user } = useAuth();

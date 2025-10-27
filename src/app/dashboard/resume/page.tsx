@@ -6,10 +6,13 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Copy, Check, FilePen, Wand2, Download, File, Image as ImageIcon, FileText } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Loader2, Copy, Check, FilePen, Wand2, Download, Image as ImageIcon, FileText } from 'lucide-react';
 import React, { useState, useTransition, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
@@ -18,6 +21,11 @@ import type { GenerateResumeInput } from '@/lib/resume-types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { useFirestore } from '@/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import type { User } from '@/lib/types';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 
 // A simple Markdown renderer component
@@ -51,15 +59,94 @@ const MarkdownPreview = ({ content, forwardedRef }: { content: string, forwarded
 
 
 export default function ResumePage() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
+  const firestore = useFirestore();
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+
+  const [editableProfile, setEditableProfile] = useState<Partial<User>>({});
   const [resumeMarkdown, setResumeMarkdown] = useState('');
+  
   const [hasCopied, setHasCopied] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const profileForResume = useMemo(() => {
+  // Initialize editable profile from the auth context user state
+  useEffect(() => {
+    if (user) {
+      setEditableProfile({
+        name: user.name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        linkedinUrl: user.linkedinUrl || '',
+        portfolioUrl: user.portfolioUrl || '',
+        college: user.college || '',
+        branch: user.branch || '',
+        semester: user.semester || 0,
+        gpa: user.gpa || 0,
+        skills: user.skills || [],
+        certifications: user.certifications || [],
+      });
+    }
+  }, [user]);
+
+  // Generate Markdown whenever the editable profile changes
+  useEffect(() => {
+    const generateInitialMarkdown = () => {
+        if (!editableProfile) return '';
+        
+        const skillsText = editableProfile.skills?.map(skill => `- **${skill.type || 'General'}:** ${skill.name}`).join('\n') || '- Add your skills in Settings';
+        const certsText = editableProfile.certifications?.map(cert => `- ${cert}`).join('\n') || '- Add your certifications in Settings';
+        
+        return `
+# ${editableProfile.name || 'Your Name'}
+
+${editableProfile.email || ''} | ${editableProfile.phone || 'Your Phone'} | ${editableProfile.linkedinUrl || 'linkedin.com/in/your-profile'}
+
+---
+
+### Professional Summary
+A brief 2-3 sentence summary about you. Aspiring Software Engineer with a passion for building innovative solutions.
+
+---
+
+### Education
+- **${editableProfile.college || 'Your College'}** | ${editableProfile.branch || 'Your Branch'}
+  - Current GPA: ${editableProfile.gpa || 'N/A'}
+  - Semester: ${editableProfile.semester || 'N/A'}
+
+---
+
+### Skills
+${skillsText}
+
+---
+
+### Certifications
+${certsText}
+
+---
+
+### Projects
+- **Project Name** | Tech Stack
+  - A brief description of your project and your role.
+  - Highlighted an key achievement or feature.
+
+---
+
+### Experience
+- **Company Name** | *Role* | *Dates (e.g. Jun 2023 - Aug 2023)*
+  - Achieved X by doing Y, resulting in Z.
+  - Collaborated with team to develop and launch new feature.
+`.trim();
+    };
+
+    setResumeMarkdown(generateInitialMarkdown());
+  }, [editableProfile]);
+
+
+  const profileForAIGeneration = useMemo(() => {
     if (!user) return null;
     return {
       name: user.name,
@@ -76,56 +163,9 @@ export default function ResumePage() {
     };
   }, [user]);
 
-  useEffect(() => {
-    if (profileForResume) {
-        const initialMarkdown = `
-# ${profileForResume.name || 'Your Name'}
-
-${profileForResume.email || ''} | ${profileForResume.phone || ''} | ${profileForResume.linkedinUrl || 'linkedin.com/in/your-profile'}
-
----
-
-### Professional Summary
-A brief 2-3 sentence summary about you. Aspiring Software Engineer with a passion for building innovative solutions.
-
----
-
-### Education
-- **${profileForResume.college || 'Your College'}** | ${profileForResume.branch || 'Your Branch'}
-  - Current GPA: ${profileForResume.gpa || 'N/A'}
-  - Expected Graduation: May 2025
-
----
-
-### Skills
-${profileForResume.skills?.map(skill => `- **${skill.type || 'General'}:** ${skill.name}`).join('\n') || '- Add your skills'}
-
----
-
-### Certifications
-${profileForResume.certifications?.map(cert => `- ${cert}`).join('\n') || '- Add your certifications'}
-
----
-
-### Projects
-- **Project Name** | Tech Stack
-  - A brief description of your project and your role.
-  - Highlighted an key achievement or feature.
-
----
-
-### Experience
-- **Company Name** | *Role* | *Dates (e.g. Jun 2023 - Aug 2023)*
-  - Achieved X by doing Y, resulting in Z.
-  - Collaborated with team to develop and launch new feature.
-`;
-        setResumeMarkdown(initialMarkdown.trim());
-    }
-  }, [profileForResume]);
-
 
   const handleGenerateResume = () => {
-    if (!profileForResume) {
+    if (!profileForAIGeneration) {
       toast({
         variant: 'destructive',
         title: 'Profile not loaded',
@@ -137,7 +177,7 @@ ${profileForResume.certifications?.map(cert => `- ${cert}`).join('\n') || '- Add
     startTransition(async () => {
       try {
         const input: GenerateResumeInput = {
-          profile: profileForResume as any, // Cast because some fields might be undefined
+          profile: profileForAIGeneration as any, // Cast because some fields might be undefined
         };
         const result = await generateResume(input);
         setResumeMarkdown(result.resumeMarkdown);
@@ -227,6 +267,34 @@ ${profileForResume.certifications?.map(cert => `- ${cert}`).join('\n') || '- Add
     }
   };
 
+  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { id, value } = e.target;
+    setEditableProfile(prev => ({ ...prev, [id]: value }));
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user || !firestore) return;
+
+    setIsSaving(true);
+    const userDocRef = doc(firestore, 'users', user.id);
+    const dataToSave = { ...editableProfile };
+
+    try {
+      await setDoc(userDocRef, dataToSave, { merge: true });
+      setUser(prev => prev ? { ...prev, ...dataToSave } : null);
+      toast({ title: "Profile Saved!", description: "Your resume details have been saved to your profile." });
+    } catch (error) {
+      const permissionError = new FirestorePermissionError({
+        path: userDocRef.path,
+        operation: 'update',
+        requestResourceData: dataToSave,
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 grid grid-cols-1 lg:grid-cols-2">
         {/* Left Column: Editor */}
@@ -237,7 +305,7 @@ ${profileForResume.certifications?.map(cert => `- ${cert}`).join('\n') || '- Add
                         <FilePen className="h-5 w-5"/>
                         Resume Editor
                     </CardTitle>
-                     <Button onClick={handleGenerateResume} disabled={isPending || !user} size="sm" variant="outline">
+                     <Button onClick={handleGenerateResume} disabled={isPending || !user} size="sm">
                         {isPending ? (
                         <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -252,17 +320,45 @@ ${profileForResume.certifications?.map(cert => `- ${cert}`).join('\n') || '- Add
                     </Button>
                 </div>
                 <CardDescription>
-                    Edit your resume using Markdown. Your changes will be reflected in the live preview.
+                    Edit your details below. Your resume preview and profile will update automatically.
                 </CardDescription>
             </CardHeader>
-            <CardContent>
-                <Textarea
-                    value={resumeMarkdown}
-                    onChange={(e) => setResumeMarkdown(e.target.value)}
-                    className="h-[calc(100vh-22rem)] min-h-[600px] font-mono text-sm"
-                    placeholder="Your resume in Markdown..."
-                />
+            <CardContent className="space-y-4">
+                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="grid gap-2">
+                        <Label htmlFor="name">Full Name</Label>
+                        <Input id="name" value={editableProfile.name || ''} onChange={handleProfileChange} />
+                    </div>
+                     <div className="grid gap-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input id="email" type="email" value={editableProfile.email || ''} onChange={handleProfileChange} />
+                    </div>
+                </div>
+                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="grid gap-2">
+                        <Label htmlFor="phone">Phone</Label>
+                        <Input id="phone" value={editableProfile.phone || ''} onChange={handleProfileChange} />
+                    </div>
+                     <div className="grid gap-2">
+                        <Label htmlFor="linkedinUrl">LinkedIn URL</Label>
+                        <Input id="linkedinUrl" value={editableProfile.linkedinUrl || ''} onChange={handleProfileChange} />
+                    </div>
+                </div>
+                <div className="grid gap-2">
+                    <Label>Raw Markdown Editor</Label>
+                    <Textarea
+                        value={resumeMarkdown}
+                        onChange={(e) => setResumeMarkdown(e.target.value)}
+                        className="h-[calc(100vh-34rem)] min-h-[400px] font-mono text-sm"
+                        placeholder="Your resume in Markdown..."
+                    />
+                </div>
             </CardContent>
+            <CardFooter className="border-t px-6 py-4 flex justify-end">
+                <Button onClick={handleSaveProfile} disabled={isSaving}>
+                    {isSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Saving Profile...</> : 'Save Profile & Resume'}
+                </Button>
+            </CardFooter>
         </Card>
 
         {/* Right Column: Preview */}
@@ -275,7 +371,7 @@ ${profileForResume.certifications?.map(cert => `- ${cert}`).join('\n') || '- Add
                     <div className="flex items-center gap-2">
                         <Button variant="outline" size="sm" onClick={handleCopyToClipboard} disabled={isDownloading}>
                             {hasCopied ? <Check /> : <Copy />}
-                            <span className="ml-2">Copy Markdown</span>
+                            <span className="ml-2">Copy MD</span>
                         </Button>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -286,7 +382,7 @@ ${profileForResume.certifications?.map(cert => `- ${cert}`).join('\n') || '- Add
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={handleDownloadPdf}>
-                                    <File className="mr-2 h-4 w-4" />
+                                    <FileText className="mr-2 h-4 w-4" />
                                     Download as PDF
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={handleDownloadPng}>

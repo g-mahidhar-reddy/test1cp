@@ -146,26 +146,8 @@ ${certsText}
   }, [editableProfile]);
 
 
-  const profileForAIGeneration = useMemo(() => {
-    if (!user) return null;
-    return {
-      name: user.name,
-      email: user.email,
-      phone: user.phone || 'Not Provided',
-      linkedinUrl: user.linkedinUrl || 'Not Provided',
-      portfolioUrl: user.portfolioUrl || 'Not Provided',
-      college: user.college,
-      branch: user.branch,
-      semester: user.semester,
-      gpa: user.gpa,
-      skills: user.skills,
-      certifications: user.certifications,
-    };
-  }, [user]);
-
-
   const handleGenerateResume = () => {
-    if (!profileForAIGeneration) {
+    if (!editableProfile) {
       toast({
         variant: 'destructive',
         title: 'Profile not loaded',
@@ -176,8 +158,22 @@ ${certsText}
 
     startTransition(async () => {
       try {
+        const profileForAI: GenerateResumeInput['profile'] = {
+            name: editableProfile.name,
+            email: editableProfile.email,
+            phone: editableProfile.phone || 'Not Provided',
+            linkedinUrl: editableProfile.linkedinUrl || 'Not Provided',
+            portfolioUrl: editableProfile.portfolioUrl || 'Not Provided',
+            college: editableProfile.college,
+            branch: editableProfile.branch,
+            semester: editableProfile.semester,
+            gpa: editableProfile.gpa,
+            skills: editableProfile.skills,
+            certifications: editableProfile.certifications,
+        };
+
         const input: GenerateResumeInput = {
-          profile: profileForAIGeneration as any, // Cast because some fields might be undefined
+          profile: profileForAI,
         };
         const result = await generateResume(input);
         setResumeMarkdown(result.resumeMarkdown);

@@ -25,6 +25,7 @@ const prompt = ai.definePrompt({
   name: 'generateResumePrompt',
   input: {schema: GenerateResumeInputSchema},
   output: {schema: GenerateResumeOutputSchema},
+  model: 'googleai/gemini-pro',
   prompt: `You are an expert resume writer. Your task is to generate a professional, clean, and effective resume in Markdown format based on the provided user profile data.
 
 **User Profile:**

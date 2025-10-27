@@ -13,6 +13,7 @@ import {
   type GenerateResumeInput, 
   type GenerateResumeOutput 
 } from '@/lib/resume-types';
+import { googleAI } from '@genkit-ai/google-genai';
 
 
 export async function generateResume(input: GenerateResumeInput): Promise<GenerateResumeOutput> {
@@ -24,6 +25,7 @@ const prompt = ai.definePrompt({
   name: 'generateResumePrompt',
   input: {schema: GenerateResumeInputSchema},
   output: {schema: GenerateResumeOutputSchema},
+  model: 'gemini-1.5-flash',
   prompt: `You are an expert resume writer. Your task is to generate a professional, clean, and effective resume in Markdown format based on the provided user profile data.
 
 **User Profile:**
